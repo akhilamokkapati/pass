@@ -186,6 +186,20 @@ round-trips through parse_packet_line). Uses SparkFun BNO080 library, I2C @
 per-sensor found/NOT-FOUND diagnostics ('#'-prefixed, skipped by the parser) and
 carries a rough on-device angle as cross-check only. Bring-up checklist in-file.
 
+**Hardware bring-up status (2026-07-12):** dual-IMU I2C detection (0x4A + 0x4B)
+and THIGH game-rotation-vector streaming are verified live on the XIAO ESP32-C3
+rig at a clean 100 Hz (seq no drops, t_ms ~10 ms, thigh quaternion unit-norm and
+evolving smoothly with motion). Day-one bug: the SHANK streamed a frozen identity
+quaternion (1,0,0,0) because enableGameRotationVector() was issued before the
+BNO085 finished its post-reset boot and was silently dropped, so the on-device
+angle was thigh-relative-to-identity (bogus 155-164 deg). This commit is the fix:
+hardened init (200 ms boot delay + begin() retries + 150/50 ms delays around
+enabling the report via a shared initSensor() helper), a loop() liveness watchdog
+that re-enables a sensor silent >1 s, and a periodic '#' health line so a dead
+sensor is visible instead of masquerading as identity. Still to confirm on
+hardware after this flash: live shank rotation vector, and the Python swing-twist
+angle tracking the on-device cross-check during slow bends.
+
 ## Build order (where we are)
 
 1. [done] `quaternion_math.py` + tests
