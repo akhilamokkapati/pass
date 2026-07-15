@@ -7,8 +7,8 @@ the validated pipeline via imports; this file renders it. Data is read through
 the single swappable point in data_source.get_source(), so switching to the real
 sensor later touches only data_source.py.
 
-Run from the repo root:
-    .venv\\Scripts\\streamlit run dashboard/app.py
+Run from the knee/ folder:
+    ../.venv/Scripts/streamlit run dashboard/app.py
 
 Demo login: password 1234, pick Patient or Therapist.
 """

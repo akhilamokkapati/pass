@@ -4,4 +4,6 @@ matplotlib
 ahrs
 pyserial
 streamlit
+pandas
+altair
 pytest

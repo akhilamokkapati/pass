@@ -233,12 +233,21 @@ live flexion axis, and validate the whole live path (serial -> engine -> metrics
 ## Scope discipline (do NOT build these yet)
 
 The full PASS vision includes ML (exercise classification, recovery scoring),
-a digital twin, LLM clinical reporting, and a dashboard. These are **phase 2** -
+a digital twin, and LLM clinical reporting. These are **phase 2** -
 they need labelled clinical data we don't have yet, and building them now means
 many fragile subsystems instead of one solid one. Keep the knee measurement
 chain excellent first. Do NOT scaffold empty ML/LLM/digital-twin folders -
 that clutter is what made my last repo overwhelming. Add a layer only when we
 actually build it.
+
+The **dashboard is built** (`dashboard/`, an SDR demo front-end) and is the
+exception to the above: it is a DISPLAY LAYER only, not a measurement or ML
+subsystem. All numbers it shows are computed live through the validated engine
+via imports; any fabricated history is explicitly labelled "Sample data / demo."
+It reads through the single swappable point `dashboard/data_source.get_source()`,
+so switching from synthetic to the live sensor is one line in `data_source.py`
+(`SOURCE_MODE = "serial"`). Run it from `knee/`:
+`../.venv/Scripts/streamlit run dashboard/app.py`.
 
 ## Conventions
 
