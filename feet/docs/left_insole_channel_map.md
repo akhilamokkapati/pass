@@ -26,7 +26,11 @@ Hardware bring-up complete and verified end to end.
 - Mux: CD74HC4067, 16-channel analog multiplexer.
 - Topology: pull-up.
   - Insole COMMON tied to GND.
-  - 220k pull-up resistor from the SIG node to 3V3.
+  - 220k pull-up resistor from the SIG node to 3V3. Value is not critical: anything
+    ~100k to 220k works on this sensor (measured units read ~188k to 202k). Mount it
+    ON THE MUX BOARD between the SIG pad and the VCC pad, not at the XIAO (the USB
+    shell can short it there). Short legs; do not bridge to the neighbouring S3 or EN
+    pads. Pre-power check: SIG-to-VCC reads ~220k, and 3V3-to-GND reads high, not 0.
 - Consequence (important): pressing a zone lowers that zone's resistance, which
   pulls the ADC reading DOWN from a roughly 4095 baseline. Higher pressure = lower
   raw ADC.
@@ -85,24 +89,28 @@ COMMON and NUL pins:
 The anatomy layer is configurable and must not hardcode assumptions beyond the
 confirmed entries below. Remaining zones are TODO, to be finalized by a press test.
 
-| Mux ch | Phys pin | Anatomy         | Status    |
-|--------|----------|-----------------|-----------|
-| C0     | 1        | TODO            | TODO      |
-| C1     | 2        | TODO            | TODO      |
-| C2     | 3        | TODO            | TODO      |
-| C3     | 4        | TODO            | TODO      |
-| C4     | 5        | TODO            | TODO      |
-| C5     | 6        | TODO            | TODO      |
-| C6     | 8        | TODO            | TODO      |
-| C7     | 9        | TODO            | TODO      |
-| C8     | 11       | Big toe         | confirmed |
-| C9     | 12       | Big toe         | confirmed |
-| C10    | 13       | TODO            | TODO      |
-| C11    | 14       | TODO            | TODO      |
-| C12    | 16       | Heel            | confirmed |
-| C13    | 17       | Heel            | confirmed |
-| C14    | 18       | TODO            | TODO      |
-| C15    | 19       | TODO            | TODO      |
+Anatomy filled from the press-test spatial layout (rows toe to heel, columns
+medial / central / lateral), cross-checked against the pin-to-channel map. Big toe
+and heel are explicitly confirmed; refine the region labels as needed.
+
+| Mux ch | Phys pin | Anatomy          | Status    |
+|--------|----------|------------------|-----------|
+| C0     | 1        | forefoot medial  | layout    |
+| C1     | 2        | forefoot medial  | layout    |
+| C2     | 3        | midfoot medial   | layout    |
+| C3     | 4        | midfoot medial   | layout    |
+| C4     | 5        | forefoot central | layout    |
+| C5     | 6        | midfoot central  | layout    |
+| C6     | 8        | midfoot central  | layout    |
+| C7     | 9        | forefoot central | layout    |
+| C8     | 11       | big toe          | confirmed |
+| C9     | 12       | big toe          | confirmed |
+| C10    | 13       | forefoot lateral | layout    |
+| C11    | 14       | forefoot lateral | layout    |
+| C12    | 16       | heel             | confirmed |
+| C13    | 17       | heel             | confirmed |
+| C14    | 18       | midfoot lateral  | layout    |
+| C15    | 19       | midfoot lateral  | layout    |
 
 ## Downstream processing requirements
 
