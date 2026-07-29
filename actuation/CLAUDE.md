@@ -26,18 +26,34 @@ kinematics side.
 |---|---|---|
 | Motor | Under evaluation - testing a range of 6-12V motors | No single motor locked in yet; candidates being screened against TSA torque/speed operating point |
 | Motor drivers under test | DRV8833, DRV8874 | DRV8874 has IPROPI current sense (usable as secondary/faster tension proxy vs strain gauge) |
-| Position feedback | AS5047P magnetic encoder | Motor angle -> string contraction -> joint angle. Commutation-feedback role dropped now that motors are brushed DC (no FOC); retained for position/contraction tracking |
+| Position feedback | AS5047P magnetic encoder (final part, not yet bench-tested) | Motor angle -> string contraction -> joint angle. Commutation-feedback role dropped now that motors are brushed DC (no FOC); retained for position/contraction tracking. Bench encoder testing so far (see below) used a generic 2-channel hall quadrature module bundled with the geared test motors, not the AS5047P itself |
 | MCU | XIAO ESP32-S3 | Wireless not yet added (needs ADC2->ADC1 migration, GPIO1-10, to avoid WiFi/BLE conflict) |
-| Force sensing | Strain gauge + Wheatstone bridge amp module (2-wire quarter-bridge, onboard op-amp + gain trimpot) | Replacing HX711 - analog output read via ESP32 ADC, not digital SPI |
+| Force sensing | Strain gauge + HX711, bridge completed with 3 fixed resistors (quarter-bridge) | Reverted back to HX711 (dedicated 24-bit ADC over a DT/SCK digital interface) after an analog Wheatstone-bridge-amp-module approach didn't pan out; no trimpot - gain is set in software (HX711 library default: channel A, gain 128) |
 
 **Earlier bench rig (795 brushed DC + BTS7960B + Arduino Uno):** used for
 early firmware iteration (hold-based control, soft-start ramp, IS-pin
 overcurrent monitoring, ADC noise mitigation via 8-sample averaging). See
-`Firmware/prototyping/twist_untwist.cpp`. Surfaced the **motor
-back-drivability problem**: 795 motor unwinds under passive load - a
-gearbox/mechanical passivity issue, not a torque rating issue. Two candidate
-fixes (powered/braked hold vs. mechanical self-locking element) -
-**unresolved, not yet decided.**
+`Firmware/prototyping/bts7960b_test.cpp` (renamed from `twist_untwist.cpp`).
+Surfaced the **motor back-drivability problem**: 795 motor unwinds under
+passive load - a gearbox/mechanical passivity issue, not a torque rating
+issue. Two candidate fixes (powered/braked hold vs. mechanical self-locking
+element) - **unresolved, not yet decided.**
+
+**Current bench test files (`Firmware/prototyping/`):**
+- `bts7960b_test.cpp` - BTS7960B + 795 motor, hold-to-run buttons, IS-pin
+  current sensing (the earlier bench rig above).
+- `drv8833_encoder_test.cpp` - DRV8833, single motor + quadrature hall
+  encoder (position tracking), hold-to-run buttons.
+- `drv8833_test.cpp` - DRV8833, single motor only, no encoder - for testing
+  additional motor candidates without needing an encoder wired.
+- `strain_gauge_test.cpp` / `strain_gauge_teleplot.cpp` - HX711 raw-reading
+  bring-up, identical except the latter formats output for the Teleplot
+  VS Code extension (`>strain:value`). Raw HX711 counts only so far - no
+  tare or calibration factor applied yet.
+- `pid_learning_test.cpp` - the mocked/simulated PID architecture test,
+  see §5. **Separate track from the physical HX711 bring-up above** - the
+  PID test's simulated tension has not yet been wired to a real sensor
+  reading; that integration is still to come.
 
 ---
 
@@ -136,8 +152,10 @@ into Σ`
   must map to bidirectional H-bridge control on DRV8833/DRV8874, not just
   PWM magnitude.
 - Anti-windup handling at Phase 1->2 transition (safety-relevant).
-- Strain gauge trimpot must be tuned to actual 50-150N range before PID
-  tuning starts (avoid clipping/saturating amp output pre-ADC).
+- Strain gauge needs tare + a calibration factor (HX711 `tare()` /
+  `set_scale()`/`get_units()`) mapping raw counts to the actual 50-150N
+  range before PID tuning starts - not yet done, currently reading raw
+  uncalibrated counts.
 - Motor/driver candidates still being tested - final gains will be
   motor-specific, loop architecture will not.
 
@@ -148,8 +166,8 @@ into Σ`
 Not building the full implementation yet. Current intent: a **quick test to
 learn the architecture** -
 
-- Get a minimal PID loop running on the XIAO ESP32-S3: strain gauge analog
-  read -> error calc -> PID -> PWM output -> DRV8833 or DRV8874
+- Get a minimal PID loop running on the XIAO ESP32-S3: strain gauge read
+  (HX711) -> error calc -> PID -> PWM output -> DRV8833 or DRV8874
 - Purpose is to understand how the pieces fit together in code (loop timing,
   ADC read, driver control), not to hit final tuned performance
 - Treat section 2 (design parameters) and section 4 (block diagram) as
