@@ -5,38 +5,35 @@ Configurable per-foot zone layouts for the PASS insole viewers.
 Positions are normalized foot coordinates (y: 0 = heel, 1 = toe). Editing them
 changes only the drawing, so this is the configurable anatomy layer.
 
-LEFT is from the press test, cross-checked channel-by-channel against the
-pin->channel map (100% consistent). RIGHT is PROVISIONAL until its press test is
-done; run the dual viewer, press each spot, see which channel lights up, then
-edit RIGHT_POSITIONS to match.
+Both feet are from the press test (each channel confirmed by pressing the spot and
+seeing which channel lights up). The two feet differ, so they have separate maps.
 """
 
-# LEFT foot - confirmed layout (mux channel -> position)
+# LEFT foot - confirmed press-test layout (mux channel -> position), toe to heel
 LEFT_POSITIONS = {
-    8:  (0.40, 0.93), 9:  (0.58, 0.93),                       # toes (big toe)
-    0:  (0.32, 0.75), 7:  (0.50, 0.75), 10: (0.68, 0.75),     # upper forefoot
-    1:  (0.32, 0.58), 4:  (0.50, 0.58), 11: (0.68, 0.58),     # forefoot
-    2:  (0.32, 0.42), 5:  (0.50, 0.42), 15: (0.68, 0.42),     # lower forefoot
-    3:  (0.32, 0.26), 6:  (0.50, 0.26), 14: (0.68, 0.26),     # midfoot
-    13: (0.42, 0.10), 12: (0.58, 0.10),                       # heel
+    8:  (0.40, 0.93), 15: (0.58, 0.93),                       # toes
+    4:  (0.32, 0.76), 7:  (0.50, 0.76), 9:  (0.68, 0.76),     # upper forefoot
+    3:  (0.32, 0.60), 6:  (0.50, 0.60), 14: (0.68, 0.60),     # forefoot
+    5:  (0.32, 0.44), 1:  (0.50, 0.44), 11: (0.68, 0.44),     # midfoot
+    2:  (0.32, 0.28), 0:  (0.50, 0.28), 12: (0.68, 0.28),     # lower
+    10: (0.42, 0.12), 13: (0.58, 0.12),                       # heel
 }
-LEFT_ANATOMY = {8: "big toe", 9: "big toe", 12: "heel", 13: "heel"}
+LEFT_ANATOMY = {8: "toe", 15: "toe", 10: "heel", 13: "heel"}
 
-# RIGHT foot - PROVISIONAL. Channels laid out in reading order; replace after the
-# right press test (its pin->channel map differs, so its layout will differ).
+# RIGHT foot - confirmed press-test layout, toe to heel
 RIGHT_POSITIONS = {
-    0:  (0.40, 0.93), 1:  (0.58, 0.93),
-    2:  (0.32, 0.75), 3:  (0.50, 0.75), 4:  (0.68, 0.75),
-    5:  (0.32, 0.58), 6:  (0.50, 0.58), 7:  (0.68, 0.58),
-    8:  (0.32, 0.42), 9:  (0.50, 0.42), 10: (0.68, 0.42),
-    11: (0.32, 0.26), 12: (0.50, 0.26), 13: (0.68, 0.26),
-    14: (0.42, 0.10), 15: (0.58, 0.10),
+    8:  (0.40, 0.93), 1:  (0.58, 0.93),                       # toes
+    2:  (0.32, 0.76), 0:  (0.50, 0.76), 13: (0.68, 0.76),     # upper forefoot
+    7:  (0.32, 0.60), 15: (0.50, 0.60), 12: (0.68, 0.60),     # forefoot
+    4:  (0.32, 0.44), 10: (0.50, 0.44), 14: (0.68, 0.44),     # midfoot
+    5:  (0.32, 0.28), 9:  (0.50, 0.28), 11: (0.68, 0.28),     # lower
+    6:  (0.42, 0.12), 3:  (0.58, 0.12),                       # heel
 }
-RIGHT_ANATOMY: dict[int, str] = {}     # TODO after right press test
+RIGHT_ANATOMY = {8: "toe", 1: "toe", 6: "heel", 3: "heel"}
 
 FEET = {
     "left":  {"positions": LEFT_POSITIONS,  "anatomy": LEFT_ANATOMY,
-              "port": "COM11", "confirmed": True},
+              "port": "COM15", "confirmed": True},
     "right": {"positions": RIGHT_POSITIONS, "anatomy": RIGHT_ANATOMY,
-              "port": None, "confirmed": False},
+              "port": "COM13", "confirmed": True},
 }
