@@ -43,10 +43,10 @@ FRONTEND_DIST = REPO / "webapp" / "frontend" / "dist"
 
 # --- shared latest state (updated by UDP threads, read by the broadcaster) ---
 STATE = {
-    "hip":  {"q": [1.0, 0, 0, 0], "t_ms": 0},
-    "knee": {"angle": 0.0, "q_thigh": [1.0, 0, 0, 0], "q_shank": [1.0, 0, 0, 0], "t_ms": 0},
-    "feet": {"left":  {"c": [0] * 16, "t_ms": 0},
-             "right": {"c": [0] * 16, "t_ms": 0}},
+    "hip":  {"q": [1.0, 0, 0, 0], "t_ms": 0, "batt": None},
+    "knee": {"angle": 0.0, "q_thigh": [1.0, 0, 0, 0], "q_shank": [1.0, 0, 0, 0], "t_ms": 0, "batt": None},
+    "feet": {"left":  {"c": [0] * 16, "t_ms": 0, "batt": None},
+             "right": {"c": [0] * 16, "t_ms": 0, "batt": None}},
 }
 _last: dict[str, float] = {}   # key -> monotonic time of last packet
 
@@ -60,20 +60,27 @@ def _handle_line(kind: str, line: str) -> None:
     if len(parts) < 3:
         return
     try:
+        # An OPTIONAL trailing battery-percent field may follow the payload.
         if kind == "hip" and parts[0] == "hip" and len(parts) >= 7:
             STATE["hip"]["t_ms"] = int(float(parts[2]))
             STATE["hip"]["q"] = [float(v) for v in parts[3:7]]
+            if len(parts) >= 8:
+                STATE["hip"]["batt"] = float(parts[7])
             _mark("hip")
         elif kind == "knee" and parts[0].lstrip("-").isdigit() and len(parts) >= 11:
             STATE["knee"]["t_ms"] = int(float(parts[1]))
             STATE["knee"]["angle"] = float(parts[2])
             STATE["knee"]["q_thigh"] = [float(v) for v in parts[3:7]]
             STATE["knee"]["q_shank"] = [float(v) for v in parts[7:11]]
+            if len(parts) >= 12:
+                STATE["knee"]["batt"] = float(parts[11])
             _mark("knee")
         elif kind == "feet" and parts[0] in ("foot_left", "foot_right") and len(parts) >= 19:
             side = "left" if parts[0] == "foot_left" else "right"
             STATE["feet"][side]["t_ms"] = int(float(parts[2]))
             STATE["feet"][side]["c"] = [int(float(v)) for v in parts[3:19]]
+            if len(parts) >= 20:
+                STATE["feet"][side]["batt"] = float(parts[19])
             _mark("foot_" + side)
     except ValueError:
         return

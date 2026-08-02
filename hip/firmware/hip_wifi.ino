@@ -29,6 +29,14 @@
 #define DEST_IP   "192.168.0.255"
 #define UDP_PORT  5004              // hip port (feet 5006, knee 5005)
 
+// ===== battery telemetry (optional) =====
+// The XIAO ESP32-S3 does NOT expose the LiPo voltage internally, so to report
+// battery you add a divider: BAT+ -> 220k -> PIN_VBAT -> 220k -> GND (halves the
+// voltage into a spare ADC pin). Set ENABLE_BATTERY 1 after wiring it, then the
+// node appends a trailing battery-percent field the dashboard reads.
+#define ENABLE_BATTERY 0
+#define PIN_VBAT       1            // D0 / GPIO1 (ADC1); free while I2C uses D4/D5
+
 static const uint32_t I2C_HZ    = 100000; // BNO085 clock-stretching: keep at 100 kHz
 static const uint16_t REPORT_MS = 10;     // game rotation vector interval (~100 Hz)
 static const uint32_t EMIT_MS   = 20;     // send cadence (~50 Hz)
@@ -85,6 +93,10 @@ void setup() {
 
   Wire.begin(D4, D5);        // XIAO I2C: SDA=D4, SCL=D5
   Wire.setClock(I2C_HZ);
+#if ENABLE_BATTERY
+  analogReadResolution(12);
+  analogSetPinAttenuation(PIN_VBAT, ADC_11db);
+#endif
   Serial.println("# PASS hip IMU bring-up (wireless)");
 
   // Block-and-wait for the join here (proven feet pattern); sensor inits after.
@@ -129,9 +141,17 @@ void loop() {
 
   if (now - lastEmit >= EMIT_MS) {
     lastEmit = now;
-    char line[96];
-    snprintf(line, sizeof(line), "%s,%lu,%lu,%.6f,%.6f,%.6f,%.6f",
-             UNIT_ID, (unsigned long)seq, (unsigned long)now, qw, qx, qy, qz);
+    char line[110];
+    int n = snprintf(line, sizeof(line), "%s,%lu,%lu,%.6f,%.6f,%.6f,%.6f",
+                     UNIT_ID, (unsigned long)seq, (unsigned long)now, qw, qx, qy, qz);
+#if ENABLE_BATTERY
+    long acc = 0;
+    for (int i = 0; i < 8; i++) acc += analogRead(PIN_VBAT);
+    float vbat = (acc / 8.0f) / 4095.0f * 3.3f * 2.0f;   // undo the /2 divider
+    int pct = (int)((vbat - 3.30f) / (4.20f - 3.30f) * 100.0f);
+    pct = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+    snprintf(line + n, sizeof(line) - n, ",%d", pct);    // trailing battery percent
+#endif
     Serial.println(line);                        // wired fallback
     udp.beginPacket(dest, UDP_PORT);             // wireless
     udp.write((const uint8_t*)line, strlen(line));

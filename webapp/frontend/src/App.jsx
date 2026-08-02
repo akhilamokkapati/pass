@@ -3,6 +3,7 @@ import { useSocket } from './useSocket.js'
 import { useMetrics } from './useMetrics.js'
 import PatientView from './PatientView.jsx'
 import ClinicianView from './ClinicianView.jsx'
+import DevicesPanel from './DevicesPanel.jsx'
 
 const KNEE_TARGET = 60
 
@@ -25,9 +26,14 @@ export default function App() {
             <button className={mode === 'patient' ? 'on' : ''} onClick={() => pick('patient')}>Patient</button>
             <button className={mode === 'clinician' ? 'on' : ''} onClick={() => pick('clinician')}>Clinician</button>
           </div>
-          <div className={`conn ${connected ? 'on' : 'off'}`}>{connected ? 'connected' : 'connecting…'}</div>
+          <div className={`conn ${connected ? 'on' : 'off'}`}
+            title="Link between this page and the PASS server (not the sensors)">
+            {connected ? 'server online' : 'server offline'}
+          </div>
         </div>
       </header>
+
+      <DevicesPanel snap={snap} />
 
       {!anyLive && (
         <div className="empty">

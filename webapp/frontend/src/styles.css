@@ -51,6 +51,25 @@ body {
 .pill.down { color: var(--muted); background: #171c24; }
 .pill.down .pill-dot { background: var(--off); }
 
+/* ---- devices strip ---- */
+.devices { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px; }
+@media (max-width: 820px) { .devices { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 460px) { .devices { grid-template-columns: repeat(2, 1fr); } }
+.device { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; font-size: 13px; }
+.device.off { opacity: .6; }
+.dev-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); flex: none; }
+.device.on .dev-dot { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.dev-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-state { margin-left: auto; color: var(--muted); font-size: 12px; }
+.batt { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; }
+.batt.none { color: var(--muted); font-size: 12px; }
+.batt-body { width: 26px; height: 13px; border: 1.5px solid var(--muted); border-radius: 3px; position: relative; padding: 1px; }
+.batt-body::after { content: ""; position: absolute; right: -4px; top: 3px; width: 2px; height: 5px; background: var(--muted); border-radius: 0 1px 1px 0; }
+.batt-fill { display: block; height: 100%; border-radius: 1px; background: var(--ok); }
+.batt.mid .batt-fill { background: var(--warn); }
+.batt.low .batt-fill { background: #ff5a4d; }
+.batt-pct { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
 /* ---- empty banner ---- */
 .empty { display: flex; align-items: center; gap: 14px; background: #141b24; border: 1px dashed var(--line); border-radius: 14px; padding: 15px 18px; margin-bottom: 16px; color: var(--muted); }
 .empty b { color: var(--text); }
