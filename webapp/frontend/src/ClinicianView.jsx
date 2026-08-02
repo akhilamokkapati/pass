@@ -1,5 +1,7 @@
 import TimeChart from './TimeChart.jsx'
 import FeetMap from './FeetMap.jsx'
+import { StatusPill } from './ui.jsx'
+import { downloadReport } from './report.js'
 
 function Stat({ label, value, unit }) {
   return (
@@ -16,7 +18,6 @@ export default function ClinicianView({ m, snap }) {
   const romMax = kneeVals.length ? Math.max(...kneeVals) : null
   const romMin = kneeVals.length ? Math.min(...kneeVals) : null
   const rom = romMax != null ? romMax - romMin : null
-
   let vel = 0
   if (hist.length >= 2) {
     const a = hist[hist.length - 1]
@@ -28,10 +29,21 @@ export default function ClinicianView({ m, snap }) {
   const sym = total > 60 ? Math.round((m.loadL / total) * 100) : null
   const fmt = (v, d = 0) => (v == null ? '--' : v.toFixed(d))
 
+  const kneeOk = !!m?.kneeOk
+  const hipOk = !!m?.hipOk
+  const feetOk = !!(m?.lOk || m?.rOk)
+
   return (
     <div className="clinician">
-      <section className="card">
-        <div className="card-head"><h3>Knee flexion</h3><span className="legend-inline">deg over time</span></div>
+      <div className="clinician-head">
+        <span className="clinician-title">Session detail</span>
+        <button className="btn download" onClick={() => downloadReport(m)}>
+          <span className="dl-ico" /> Download report
+        </button>
+      </div>
+
+      <section className="card accent-knee">
+        <div className="card-head"><h3>Knee flexion</h3><StatusPill ok={kneeOk} /></div>
         <TimeChart data={hist} series={[{ key: 'knee', color: '#4ea1ff' }]} unit="°" windowS={25} />
         <div className="stat-row">
           <Stat label="current" value={fmt(m?.kneeAngle, 1)} unit="°" />
@@ -42,8 +54,8 @@ export default function ClinicianView({ m, snap }) {
         </div>
       </section>
 
-      <section className="card">
-        <div className="card-head"><h3>Pelvis tilt</h3><span className="legend-inline">deg from neutral</span></div>
+      <section className="card accent-hip">
+        <div className="card-head"><h3>Pelvis tilt</h3><StatusPill ok={hipOk} /></div>
         <TimeChart data={hist} series={[{ key: 'hip', color: '#f6c24b' }]} unit="°" windowS={25} />
         <div className="stat-row">
           <Stat label="current tilt" value={fmt(m?.hipTilt, 1)} unit="°" />
@@ -51,12 +63,10 @@ export default function ClinicianView({ m, snap }) {
         </div>
       </section>
 
-      <section className="card">
+      <section className="card accent-balance">
         <div className="card-head">
-          <h3>Foot loading &amp; symmetry</h3>
-          <span className="legend-inline">
-            <i className="dot blue" /> left <i className="dot orange" /> right
-          </span>
+          <h3>Foot loading and symmetry</h3>
+          <span className="legend-inline"><i className="dot blue" /> left <i className="dot orange" /> right</span>
         </div>
         <TimeChart data={hist}
           series={[{ key: 'loadL', color: '#4ea1ff' }, { key: 'loadR', color: '#f6774b' }]}
@@ -65,6 +75,7 @@ export default function ClinicianView({ m, snap }) {
           <Stat label="left load" value={fmt(m?.loadL, 0)} unit="" />
           <Stat label="right load" value={fmt(m?.loadR, 0)} unit="" />
           <Stat label="L / R split" value={sym == null ? '--' : `${sym}/${100 - sym}`} unit="%" />
+          <Stat label="feet" value={feetOk ? 'connected' : 'not conn.'} unit="" />
         </div>
         <FeetMap feet={snap?.feet} />
       </section>

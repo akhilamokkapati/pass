@@ -33,7 +33,7 @@ export default function App() {
         <div className="empty">
           <span className="empty-dot" />
           <div><b>No sensors connected.</b> Power on a node (feet, knee, or hip) on the
-            30.007 network — live data appears here automatically.</div>
+            30.007 network and live data appears here automatically.</div>
         </div>
       )}
 
