@@ -1,0 +1,52 @@
+import { useState } from 'react'
+import { useSocket } from './useSocket.js'
+import { useMetrics } from './useMetrics.js'
+import PatientView from './PatientView.jsx'
+import ClinicianView from './ClinicianView.jsx'
+
+const KNEE_TARGET = 60
+
+export default function App() {
+  const { snap, connected } = useSocket()
+  const { m, zeroHip, resetReps } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
+  const [mode, setMode] = useState(() => localStorage.getItem('pass_mode') || 'patient')
+  const pick = (x) => { setMode(x); localStorage.setItem('pass_mode', x) }
+  const anyLive = !!m?.anyLive
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <span className="logo">PASS</span>
+          <span className="tagline">Patient Assessment Sensing System</span>
+        </div>
+        <div className="top-right">
+          <div className="modeswitch">
+            <button className={mode === 'patient' ? 'on' : ''} onClick={() => pick('patient')}>Patient</button>
+            <button className={mode === 'clinician' ? 'on' : ''} onClick={() => pick('clinician')}>Clinician</button>
+          </div>
+          <div className={`conn ${connected ? 'on' : 'off'}`}>{connected ? 'connected' : 'connecting…'}</div>
+        </div>
+      </header>
+
+      {!anyLive && (
+        <div className="empty">
+          <span className="empty-dot" />
+          <div><b>No sensors connected.</b> Power on a node (feet, knee, or hip) on the
+            30.007 network — live data appears here automatically.</div>
+        </div>
+      )}
+
+      {mode === 'patient'
+        ? <PatientView m={m} kneeTarget={KNEE_TARGET} />
+        : <ClinicianView m={m} snap={snap} />}
+
+      <div className="actions">
+        <button className="btn ghost" onClick={zeroHip}>Zero hip (stand tall)</button>
+        <button className="btn ghost" onClick={resetReps}>Reset reps</button>
+      </div>
+
+      <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
+    </div>
+  )
+}

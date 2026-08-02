@@ -12,7 +12,13 @@ talking to; every source exposes the same stream()/get_data() interface.
 
 from __future__ import annotations
 
+import json
+import pathlib
+
+import numpy as np
+
 from sources.synthetic import SyntheticSource
+from biomechanics.joint_angles import DEFAULT_FLEXION_AXIS
 # When the hardware arrives, uncomment the one you need:
 # from sources.serial_source import SerialSource
 # from sources.hugadb import HuGaDBSource
@@ -25,6 +31,23 @@ SOURCE_MODE = "synthetic"        # "synthetic" | "serial" | "hugadb"
 # Config for each mode (only the active one is used).
 SERIAL_PORT = "COM5"             # set to the XIAO's port on sensor day
 HUGADB_FILE = "hugadb/HuGaDB_v2_various_01_00.csv"
+
+# Live-sensor calibration written by calibrate_live.py (knee/live_calibration.json).
+_CALIB_FILE = pathlib.Path(__file__).resolve().parent.parent / "live_calibration.json"
+_IDENTITY = np.array([1.0, 0.0, 0.0, 0.0])
+
+
+def get_calibration():
+    """(q_neutral, flexion_axis) applied to the live angle so it reads accurately.
+
+    In serial mode, loads live_calibration.json (from calibrate_live.py) so a
+    straight leg reads ~0 deg and the flexion axis matches how the sensors are
+    mounted. Otherwise returns the identity neutral + default axis, i.e. exactly
+    the previous synthetic behavior (no calibration applied)."""
+    if SOURCE_MODE == "serial" and _CALIB_FILE.exists():
+        d = json.loads(_CALIB_FILE.read_text(encoding="utf-8"))
+        return np.asarray(d["q_neutral"], float), np.asarray(d["flexion_axis"], float)
+    return _IDENTITY, np.asarray(DEFAULT_FLEXION_AXIS, float)
 
 
 def get_source():

@@ -52,13 +52,15 @@ class LiveKneePlot:
 
     def __init__(self, source, window_s: float = 10.0, target_fps: float = 30.0,
                  cutoff_hz: float = DEFAULT_CUTOFF_HZ,
-                 axis=DEFAULT_FLEXION_AXIS, q_neutral=IDENTITY_QUAT):
+                 axis=DEFAULT_FLEXION_AXIS, q_neutral=IDENTITY_QUAT,
+                 title: str = "PASS knee - live (synthetic stream)"):
         self.source = source
         self.rate_hz = _source_rate_hz(source)
         self.window_s = float(window_s)
         self.target_fps = float(target_fps)
         self.axis = np.asarray(axis, dtype=float)
         self.q_neutral = np.asarray(q_neutral, dtype=float)
+        self.title = str(title)
 
         self._stream = source.stream()               # infinite; WE pace it
         self._filter = StreamingLowpass(cutoff_hz, self.rate_hz)
@@ -116,7 +118,7 @@ class LiveKneePlot:
         (self._filt_line,) = self.ax.plot([], [], color="C0", lw=1.8, label="filtered")
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("Knee flexion (deg)")
-        self.ax.set_title("PASS knee - live (synthetic stream)")
+        self.ax.set_title(self.title)
         self.ax.legend(loc="upper right")
         self.ax.grid(alpha=0.3)
         return self.fig

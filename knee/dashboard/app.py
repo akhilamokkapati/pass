@@ -34,8 +34,8 @@ import altair as alt
 import streamlit as st
 
 import theme
-from data_source import get_source, source_label
-from biomechanics.relative_orientation import knee_relative
+from data_source import get_source, source_label, get_calibration
+from biomechanics.relative_orientation import knee_relative, remove_offset
 from biomechanics.joint_angles import knee_flexion_angle
 from filters import StreamingLowpass, lowpass_offline
 from metrics import range_of_motion, summarize
@@ -155,6 +155,7 @@ def _init_patient_stream():
     rate = float(getattr(source, "rate_hz", getattr(source, "fs_hz", 100.0)))
     ss.p_source = source
     ss.p_rate = rate
+    ss.p_neutral, ss.p_axis = get_calibration()
     ss.p_stream = source.stream()
     ss.p_filter = StreamingLowpass(cutoff_hz=6.0, fs_hz=rate)
     ss.p_times = deque(maxlen=int(PLOT_WINDOW_S * rate) + 5)
@@ -163,7 +164,7 @@ def _init_patient_stream():
 
 
 def _reset_patient_stream():
-    for k in ("p_source", "p_rate", "p_stream", "p_filter",
+    for k in ("p_source", "p_rate", "p_neutral", "p_axis", "p_stream", "p_filter",
               "p_times", "p_angles", "p_session"):
         st.session_state.pop(k, None)
 
@@ -177,9 +178,11 @@ def _pull_samples(n: int):
             pkt = next(ss.p_stream)
         except StopIteration:
             break
-        # validated path: recompute angle from the raw quaternions (source-agnostic).
-        # Default +x flexion axis for synthetic; becomes the measured axis on hardware.
-        raw = float(knee_flexion_angle(knee_relative(pkt.quat_thigh, pkt.quat_shank)))
+        # validated path: recompute angle from the raw quaternions (source-agnostic),
+        # applying the calibration (straight-leg zero + measured axis) so live values
+        # are accurate. Neutral=identity + default axis reproduces synthetic behavior.
+        rel = remove_offset(knee_relative(pkt.quat_thigh, pkt.quat_shank), ss.p_neutral)
+        raw = float(knee_flexion_angle(rel, axis=ss.p_axis))
         ss.p_angles.append(ss.p_filter.process(raw))
         ss.p_times.append(pkt.t_ms / 1000.0)
         ss.p_session.append(ss.p_angles[-1])
@@ -269,7 +272,9 @@ def _capture_current_session():
     src = get_source()
     rate = float(getattr(src, "rate_hz", getattr(src, "fs_hz", 100.0)))
     cap = src.get_data(SESSION_DURATION_S)
-    raw = knee_flexion_angle(knee_relative(cap.quat_thigh, cap.quat_shank))
+    q_neutral, axis = get_calibration()
+    rel = remove_offset(knee_relative(cap.quat_thigh, cap.quat_shank), q_neutral)
+    raw = knee_flexion_angle(rel, axis=axis)
     angle = lowpass_offline(np.asarray(raw, float), cutoff_hz=6.0, fs_hz=rate)
     ss.th_rate = rate
     ss.th_time = np.asarray(cap.t_ms, float) / 1000.0
