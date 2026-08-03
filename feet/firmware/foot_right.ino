@@ -41,7 +41,7 @@
 static const uint8_t SEL[4] = {PIN_S0, PIN_S1, PIN_S2, PIN_S3};
 WiFiUDP udp;
 IPAddress dest;
-uint32_t frame = 0, lastSample = 0, lastSend = 0, lastBatt = 0;
+uint32_t frame = 0, lastSample = 0, lastSend = 0, lastBatt = 0, lastWifiTry = 0;
 int inv[16];
 int battPct = 0;
 
@@ -78,6 +78,7 @@ int getLiPoPercentage(float v) {
 void connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);     // stack reconnects in the background, no blocking
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(250);
@@ -102,7 +103,13 @@ void setup() {
 void loop() {
   uint32_t now = millis();
 
-  if (WiFi.status() != WL_CONNECTED) { connectWifi(); return; }
+  // Non-blocking reconnect: retry every 10 s if the link is down, WITHOUT waiting
+  // (a blocking wait here froze the stream for ~15 s and showed as "stale").
+  // Sampling and sends keep running; a send just fails harmlessly while down.
+  if (WiFi.status() != WL_CONNECTED && now - lastWifiTry > 10000) {
+    lastWifiTry = now;
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+  }
 
   if (now - lastSample >= SAMPLE_MS) {
     lastSample = now;
