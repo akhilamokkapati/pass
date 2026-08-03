@@ -1,7 +1,9 @@
 /*
  * foot_right.ino  -  PASS RIGHT foot insole node, wireless (WiFi UDP, v1).
  * Identical to foot_left.ino except UNIT_ID. Values are already inverted
- * (pressure-up), so the laptop receiver does NOT invert again.
+ * (pressure-up), so the laptop receiver does NOT invert again. Reports LiPo
+ * battery percent as a trailing field (read on ADC1 pin GPIO5 - never an ADC2
+ * pin like GPIO14, which conflicts with WiFi).
  */
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -22,6 +24,14 @@
 #define PIN_S3  7   // D8  GPIO7
 // mux EN -> GND, COMMON -> GND
 
+// ===== battery sense =====
+// External divider: BAT+ -> 100k -> PIN_VBAT -> 100k -> GND (halves the voltage).
+// PIN_VBAT MUST be an ADC1 pin (GPIO1-10) so it works while WiFi is on.
+#define PIN_VBAT     5      // D4 / GPIO5 (ADC1); free on the feet
+#define VBAT_DIVIDER 2.0f   // 100k/100k -> x2. Change if you use other resistors.
+#define VBAT_CAL     1.000f // multimeter V / reported V, if it drifts
+#define BATT_MS      5000   // recompute battery every 5 s
+
 #define ADC_MAX   4095
 #define SAMPLE_MS 10        // scan all 16 zones at 100 Hz
 #define SEND_MS   100       // send a frame at 10 Hz
@@ -29,8 +39,9 @@
 static const uint8_t SEL[4] = {PIN_S0, PIN_S1, PIN_S2, PIN_S3};
 WiFiUDP udp;
 IPAddress dest;
-uint32_t frame = 0, lastSample = 0, lastSend = 0;
+uint32_t frame = 0, lastSample = 0, lastSend = 0, lastBatt = 0;
 int inv[16];
+int battPct = 0;
 
 void selCh(uint8_t c) {
   for (uint8_t i = 0; i < 4; i++) digitalWrite(SEL[i], (c >> i) & 1);
@@ -46,9 +57,25 @@ int readCh(uint8_t c) {
   return a / 4;
 }
 
+float readBatteryVoltage() {
+  uint32_t mvSum = 0;
+  for (int i = 0; i < 8; i++) { mvSum += analogReadMilliVolts(PIN_VBAT); delay(1); }
+  return (mvSum / 8.0f) * VBAT_DIVIDER / 1000.0f * VBAT_CAL;
+}
+
+int getLiPoPercentage(float v) {
+  if (v >= 4.20f) return 100;
+  if (v <= 3.30f) return 0;
+  if (v > 3.95f) return 80 + (int)((v - 3.95f) / (4.20f - 3.95f) * 20.0f);
+  if (v > 3.80f) return 50 + (int)((v - 3.80f) / (3.95f - 3.80f) * 30.0f);
+  if (v > 3.65f) return 20 + (int)((v - 3.65f) / (3.80f - 3.65f) * 30.0f);
+  if (v > 3.40f) return 5  + (int)((v - 3.40f) / (3.65f - 3.40f) * 15.0f);
+  return (int)((v - 3.30f) / (3.40f - 3.30f) * 5.0f);
+}
+
 void connectWifi() {
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);            // keep the radio awake so 10 Hz UDP is not dropped
+  WiFi.setSleep(false);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(250);
@@ -65,6 +92,7 @@ void setup() {
   for (uint8_t i = 0; i < 4; i++) { pinMode(SEL[i], OUTPUT); digitalWrite(SEL[i], LOW); }
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_SIG, ADC_11db);
+  analogSetPinAttenuation(PIN_VBAT, ADC_11db);
   connectWifi();
   udp.begin(UDP_PORT);
 }
@@ -72,12 +100,19 @@ void setup() {
 void loop() {
   uint32_t now = millis();
 
-  // keep the link up if the router drops us
   if (WiFi.status() != WL_CONNECTED) { connectWifi(); return; }
 
   if (now - lastSample >= SAMPLE_MS) {
     lastSample = now;
-    for (uint8_t c = 0; c < 16; c++) inv[c] = ADC_MAX - readCh(c);   // invert here
+    for (uint8_t c = 0; c < 16; c++) inv[c] = ADC_MAX - readCh(c);
+  }
+
+  if (now - lastBatt >= BATT_MS) {
+    lastBatt = now;
+    float v = readBatteryVoltage();
+    battPct = getLiPoPercentage(v);
+    Serial.print("# battery "); Serial.print(v, 3); Serial.print(" V  ");
+    Serial.print(battPct); Serial.println(" %");
   }
 
   if (now - lastSend >= SEND_MS) {
@@ -87,6 +122,7 @@ void loop() {
                      UNIT_ID, (unsigned long)frame, (unsigned long)now);
     for (uint8_t c = 0; c < 16; c++)
       n += snprintf(p + n, sizeof(p) - n, ",%d", inv[c]);
+    n += snprintf(p + n, sizeof(p) - n, ",%d", battPct);
     udp.beginPacket(dest, UDP_PORT);
     udp.write((const uint8_t *)p, strlen(p));
     udp.endPacket();
