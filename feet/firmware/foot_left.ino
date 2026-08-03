@@ -15,10 +15,10 @@
 // ===== per-foot id =====
 #define UNIT_ID   "foot_left"
 // ===== network (same on both feet) =====
-#define WIFI_SSID "30.007"
-#define WIFI_PASS "awesomesauce144"
-// Broadcast to the whole subnet, so the laptop receives no matter what IP it or
-// this node ends up with (removes the "laptop must be exactly .100" trap).
+#define WIFI_SSID "TP-Link_1285"    // travel router, now bridged to SUTD_Guest (has internet)
+#define WIFI_PASS "15289346"
+// Directed subnet broadcast: the router delivers it to every 192.168.0.x client,
+// including the laptop even when it is on the 5 GHz band of the same router.
 #define DEST_IP   "192.168.0.255"
 #define UDP_PORT  5006
 
@@ -31,11 +31,10 @@
 // mux EN -> GND, COMMON -> GND
 
 // ===== status LED =====
-// External LED on D10 / GPIO9:  D10 --[330 ohm]--|>|-- GND  (LED long leg toward
-// the resistor/D10 side, short leg to GND). Solid = joined WiFi, blink =
-// searching, off = not powered.
-#define LED_PIN 9
-#define LED_ON  HIGH      // external LED to GND lights when the pin is HIGH
+// Onboard orange user LED on GPIO21 (active LOW: LOW = lit). Solid = joined WiFi,
+// blink = searching, off = not powered. No external wiring needed.
+#define LED_PIN 21
+#define LED_ON  LOW
 
 // ===== battery sense =====
 // External divider: BAT+ -> 100k -> PIN_VBAT -> 100k -> GND (halves the voltage).
@@ -139,8 +138,9 @@ void loop() {
     lastBatt = now;
     float v = readBatteryVoltage();
     battPct = getLiPoPercentage(v);
-    Serial.print("# battery "); Serial.print(v, 3); Serial.print(" V  ");
-    Serial.print(battPct); Serial.println(" %");   // watch this to set VBAT_CAL
+    Serial.print("# wifi "); Serial.print(WiFi.status() == WL_CONNECTED ? "UP " : "DOWN ");
+    Serial.print(WiFi.localIP()); Serial.print("  battery "); Serial.print(v, 3);
+    Serial.print(" V  "); Serial.print(battPct); Serial.println(" %");   // watch to set VBAT_CAL
   }
 
   if (now - lastSend >= SEND_MS) {
