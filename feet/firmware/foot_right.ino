@@ -27,10 +27,11 @@
 // mux EN -> GND, COMMON -> GND
 
 // ===== status LED =====
-// Onboard XIAO S3 LED (active LOW: LOW = lit). Solid = joined WiFi, blink =
-// searching, off = not powered. For an external LED use a free pin like 9 (D10):
-//   GPIO9 --[330 ohm]--|>|-- GND   and set LED_PIN to 9.
-#define LED_PIN LED_BUILTIN
+// External LED on D10 / GPIO9:  D10 --[330 ohm]--|>|-- GND  (LED long leg toward
+// the resistor/D10 side, short leg to GND). Solid = joined WiFi, blink =
+// searching, off = not powered.
+#define LED_PIN 9
+#define LED_ON  HIGH      // external LED to GND lights when the pin is HIGH
 
 // ===== battery sense =====
 // External divider: BAT+ -> 100k -> PIN_VBAT -> 100k -> GND (halves the voltage).
@@ -100,7 +101,7 @@ void setup() {
   delay(300);
   for (uint8_t i = 0; i < 4; i++) { pinMode(SEL[i], OUTPUT); digitalWrite(SEL[i], LOW); }
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);   // off until we know the WiFi state
+  digitalWrite(LED_PIN, !LED_ON);   // off until we know the WiFi state
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_SIG, ADC_11db);
   analogSetPinAttenuation(PIN_VBAT, ADC_11db);
@@ -119,9 +120,9 @@ void loop() {
     WiFi.begin(WIFI_SSID, WIFI_PASS);
   }
 
-  // status LED: solid = joined, blinking = searching (active LOW)
-  if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LOW);
-  else digitalWrite(LED_PIN, ((now / 300) % 2) ? LOW : HIGH);
+  // status LED: solid = joined, blinking = searching
+  if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LED_ON);
+  else digitalWrite(LED_PIN, ((now / 300) % 2) ? LED_ON : !LED_ON);
 
   if (now - lastSample >= SAMPLE_MS) {
     lastSample = now;
