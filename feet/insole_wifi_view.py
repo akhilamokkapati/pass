@@ -56,8 +56,10 @@ class UdpReceiver:
                 continue
             unit = parts[0]
             ints = [int(t) for t in parts[1:] if t.lstrip("-").isdigit()]
-            if len(ints) >= 16:
-                self.latest[unit] = np.array(ints[-16:], dtype=float)
+            # ints = [frame, t_ms, c0..c15, (battery)]; take the 16 channels by
+            # position so an optional trailing battery field does not shift them.
+            if len(ints) >= 18:
+                self.latest[unit] = np.array(ints[2:18], dtype=float)
                 self.stamp[unit] = time.monotonic()
 
 
