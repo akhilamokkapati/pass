@@ -82,5 +82,10 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     threading.Thread(target=udp_listener, daemon=True).start()
-    print(f"battery page: http://localhost:{HTTP_PORT}")
-    ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), H).serve_forever()
+    print(f"battery page: http://localhost:{HTTP_PORT}   (Ctrl-C to stop)")
+    server = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), H)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped.")
+        server.shutdown()
