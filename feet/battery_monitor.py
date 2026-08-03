@@ -20,12 +20,14 @@ def udp_listener():
         data, _ = s.recvfrom(2048)
         for line in data.decode("ascii", "ignore").splitlines():
             p = line.strip().split(",")
-            # foot_left/right, frame, t_ms, c0..c15, batt  -> 20 fields
-            if len(p) >= 20 and p[0] in ("foot_left", "foot_right"):
-                try:
-                    batt = int(float(p[19]))
-                except ValueError:
-                    continue
+            # foot pressure packet is 19 fields; battery firmware appends a 20th.
+            if len(p) >= 19 and p[0] in ("foot_left", "foot_right"):
+                batt = None
+                if len(p) >= 20:
+                    try:
+                        batt = int(float(p[19]))
+                    except ValueError:
+                        batt = None
                 with lock:
                     state[p[0]] = {"batt": batt, "t": time.monotonic()}
 
@@ -54,7 +56,8 @@ const col=p=>p<=15?'#ff5a4d':p<=35?'#f6c24b':'#3ddc84';
 async function tick(){let d={};try{d=await(await fetch('/data')).json()}catch(e){}
  for(const u of ['foot_left','foot_right']){const el=document.getElementById(u),v=d[u],live=v&&v.age<4;
   el.classList.toggle('off',!live);const pct=el.querySelector('.pct'),fill=el.querySelector('.fill'),st=el.querySelector('.state');
-  if(live){pct.textContent=v.batt+'%';fill.style.width=v.batt+'%';fill.style.background=col(v.batt);st.textContent='live';}
+  if(live&&v.batt!=null){pct.textContent=v.batt+'%';fill.style.width=v.batt+'%';fill.style.background=col(v.batt);st.textContent='live';}
+  else if(live){pct.textContent='OK';fill.style.width='0';st.textContent='connected, flash battery firmware for %';}
   else{pct.textContent='--';fill.style.width='0';st.textContent=v?'stale':'not connected';}}}
 setInterval(tick,1500);tick();
 </script>"""
