@@ -30,6 +30,12 @@
 #define PIN_S3  7   // D8  GPIO7
 // mux EN -> GND, COMMON -> GND
 
+// ===== status LED =====
+// Onboard XIAO S3 LED (active LOW: LOW = lit). Solid = joined WiFi, blink =
+// searching, off = not powered. For an external LED use a free pin like 9 (D10):
+//   GPIO9 --[330 ohm]--|>|-- GND   and set LED_PIN to 9.
+#define LED_PIN LED_BUILTIN
+
 // ===== battery sense =====
 // External divider: BAT+ -> 100k -> PIN_VBAT -> 100k -> GND (halves the voltage).
 // PIN_VBAT MUST be an ADC1 pin (GPIO1-10) so it works while WiFi is on.
@@ -99,6 +105,8 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   for (uint8_t i = 0; i < 4; i++) { pinMode(SEL[i], OUTPUT); digitalWrite(SEL[i], LOW); }
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);   // off until we know the WiFi state
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_SIG, ADC_11db);
   analogSetPinAttenuation(PIN_VBAT, ADC_11db);   // full range for the divided battery
@@ -116,6 +124,10 @@ void loop() {
     lastWifiTry = now;
     WiFi.begin(WIFI_SSID, WIFI_PASS);
   }
+
+  // status LED: solid = joined, blinking = searching (active LOW)
+  if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LOW);
+  else digitalWrite(LED_PIN, ((now / 300) % 2) ? LOW : HIGH);
 
   if (now - lastSample >= SAMPLE_MS) {
     lastSample = now;
