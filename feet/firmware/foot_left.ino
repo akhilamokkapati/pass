@@ -17,7 +17,9 @@
 // ===== network (same on both feet) =====
 #define WIFI_SSID "30.007"
 #define WIFI_PASS "awesomesauce144"
-#define LAPTOP_IP "192.168.0.100"
+// Broadcast to the whole subnet, so the laptop receives no matter what IP it or
+// this node ends up with (removes the "laptop must be exactly .100" trap).
+#define DEST_IP   "192.168.0.255"
 #define UDP_PORT  5006
 
 // ===== explicit GPIO pin map (XIAO ESP32-S3) =====
@@ -85,7 +87,7 @@ void connectWifi() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(250);
-  dest.fromString(LAPTOP_IP);
+  dest.fromString(DEST_IP);
   Serial.print("# " UNIT_ID " wifi ");
   Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED ");
   Serial.print(WiFi.localIP());
