@@ -28,7 +28,7 @@ kinematics side.
 | Motor drivers under test | DRV8833, DRV8874 | DRV8874 has IPROPI current sense (usable as secondary/faster tension proxy vs strain gauge) |
 | Position feedback | AS5047P magnetic encoder (final part, not yet bench-tested) | Motor angle -> string contraction -> joint angle. Commutation-feedback role dropped now that motors are brushed DC (no FOC); retained for position/contraction tracking. Bench encoder testing so far (see below) used a generic 2-channel hall quadrature module bundled with the geared test motors, not the AS5047P itself |
 | MCU | XIAO ESP32-S3 | Wireless not yet added (needs ADC2->ADC1 migration, GPIO1-10, to avoid WiFi/BLE conflict) |
-| Force sensing | Strain gauge + HX711, bridge completed with 3 fixed resistors (quarter-bridge) | Reverted back to HX711 (dedicated 24-bit ADC over a DT/SCK digital interface) after an analog Wheatstone-bridge-amp-module approach didn't pan out; no trimpot - gain is set in software (HX711 library default: channel A, gain 128) |
+| Force sensing | Strain gauge + HX711, bridge completed with 3 fixed resistors (quarter-bridge) | Reverted back to HX711 (dedicated 24-bit ADC over a DT/SCK digital interface) after an analog Wheatstone-bridge-amp-module approach didn't pan out; no trimpot - gain is set in software (HX711 library default: channel A, gain 128). **One gauge + one HX711 per motor** (not shared via A/B channels - costs resolution/update rate, and antagonistic pair needs independent tension readings per string). See §7. |
 
 **Earlier bench rig (795 brushed DC + BTS7960B + Arduino Uno):** used for
 early firmware iteration (hold-based control, soft-start ramp, IS-pin
@@ -206,6 +206,17 @@ Not part of the confirmed spec (section 3) yet - single-actuator tension
 regulation is the current target. Captured here for when a second motor
 (antagonistic string pair, e.g. flex/extend muscle-pair layout) comes up:
 
+- **Sensing architecture (confirmed):** both motors will be housed on the
+  same mounting piece per leg, but each still gets its own strain gauge +
+  own HX711 - **2 gauges + 2 HX711s per leg.** Sharing a mounting piece is a
+  mechanical detail; it doesn't change the sensing requirement. Independent
+  per-motor tension readings are required because the two PID loops below
+  need separate `measuredTensionA`/`measuredTensionB` - a combined/shared
+  reading would make it impossible to tell which motor is over/under-
+  tensioned. Open mechanical question (not yet resolved): exact gauge
+  bonding location on each string's force path, so each gauge picks up only
+  its own string's force and not cross-talk from the other motor through
+  the shared structure.
 - **Separate `PID` instance per motor** (own `Input`/`Output`/`Setpoint`,
   gains can differ per side if the two are mechanically asymmetric) - not
   one shared PID trying to do both.
