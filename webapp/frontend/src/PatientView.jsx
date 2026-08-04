@@ -43,32 +43,30 @@ export default function PatientView({ m, kneeTarget }) {
     <div className="grid patient">
       <div className={`card center accent-knee ${kneeOk ? '' : 'off'}`}>
         <Head title="Knee bend" ok={kneeOk} />
+        <Ring value={kneeOk ? m.kneeAngle : null} max={kneeTarget} sub={`target ${kneeTarget}°`}
+          reached={kneeReached} color="#4ea1ff" />
         {kneeOk ? (
           <>
-            <Ring value={m.kneeAngle} max={kneeTarget} sub={`target ${kneeTarget}°`}
-              reached={kneeReached} color="#4ea1ff" />
             <div className="reps">{m?.reps ?? 0}<span>reps</span></div>
             <div className={`cue ${kneeReached ? 'good' : ''}`}>
               {kneeReached ? 'Target reached' : 'Keep bending'}
             </div>
           </>
-        ) : <div className="notconn">Not connected</div>}
+        ) : <div className="cue">Waiting for sensor</div>}
       </div>
 
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />
-        {feetOk ? <BalanceBar m={m} /> : <div className="notconn">Not connected</div>}
+        <BalanceBar m={m} />
       </div>
 
       <div className={`card center accent-hip ${hipOk ? '' : 'off'}`}>
         <Head title="Keep hips level" ok={hipOk} />
-        {hipOk ? (
-          <>
-            <Ring value={m.hipTilt} max={20} unit="°" sub="stay under 10°"
-              reached={hipLevel} color={hipLevel ? '#3ddc84' : '#f6c24b'} />
-            <div className={`cue ${hipLevel ? 'good' : ''}`}>{hipLevel ? 'Level' : 'Straighten up'}</div>
-          </>
-        ) : <div className="notconn">Not connected</div>}
+        <Ring value={hipOk ? m.hipTilt : null} max={20} unit="°" sub="stay under 10°"
+          reached={hipLevel} color={hipLevel ? '#3ddc84' : '#f6c24b'} />
+        <div className={`cue ${hipOk && hipLevel ? 'good' : ''}`}>
+          {hipOk ? (hipLevel ? 'Level' : 'Straighten up') : 'Waiting for sensor'}
+        </div>
       </div>
     </div>
   )
