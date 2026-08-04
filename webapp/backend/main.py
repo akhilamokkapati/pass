@@ -1,123 +1,48 @@
 r"""
 PASS live dashboard - backend (data bridge).
 
-Ingests the wireless sensor UDP streams and serves them to browsers over one
-WebSocket, plus the built React app. A cloudflared tunnel in front of this makes
-it a single public https link.
+Ingests sensor readings and serves them to browsers over one WebSocket, plus
+the built React app. Two ways readings get in:
 
-    feet  -> UDP :5006   foot_left / foot_right : 16 pressure channels (inverted)
-    knee  -> UDP :5005   seq,t_ms,angle,qthigh(4),qshank(4)
-    hip   -> UDP :5004   hip,seq,t_ms,q(4)   pelvis quaternion
+  - Direct UDP, when this runs on the same LAN as the sensor nodes:
+      feet  -> UDP :5006   foot_left / foot_right : 16 pressure channels (inverted)
+      knee  -> UDP :5005   seq,t_ms,angle,qthigh(4),qshank(4)
+      hip   -> UDP :5004   hip,seq,t_ms,q(4)   pelvis quaternion
+  - POST /api/ingest, from relay.py, when this runs remotely (e.g. Render) and
+    a relay on the LAN forwards readings over HTTPS instead.
 
 UDP is received on plain sockets in daemon threads (robust on Windows, where
 asyncio datagram endpoints are unreliable); FastAPI/asyncio only reads the shared
 snapshot and fans it out to WebSocket clients at ~20 Hz.
 
-Run (from repo root, venv):
+Run locally (from repo root, venv):
     ..\.venv\Scripts\python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000
 Then tunnel it public:
     cloudflared tunnel --url http://localhost:8000
+Or deploy permanently: see render.yaml + webapp/README.md.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import pathlib
-import socket
 import sys
 import threading
-import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-# --- node ports ---
-PORT_FEET = 5006
-PORT_KNEE = 5005
-PORT_HIP = 5004
+from . import ingest
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 FRONTEND_DIST = REPO / "webapp" / "frontend" / "dist"
 
-# --- shared latest state (updated by UDP threads, read by the broadcaster) ---
-STATE = {
-    "hip":  {"q": [1.0, 0, 0, 0], "t_ms": 0, "batt": None},
-    "knee": {"angle": 0.0, "q_thigh": [1.0, 0, 0, 0], "q_shank": [1.0, 0, 0, 0], "t_ms": 0, "batt": None},
-    "feet": {"left":  {"c": [0] * 16, "t_ms": 0, "batt": None},
-             "right": {"c": [0] * 16, "t_ms": 0, "batt": None}},
-}
-_last: dict[str, float] = {}   # key -> monotonic time of last packet
-
-
-def _mark(key: str) -> None:
-    _last[key] = time.monotonic()
-
-
-def _handle_line(kind: str, line: str) -> None:
-    parts = line.strip().split(",")
-    if len(parts) < 3:
-        return
-    try:
-        # An OPTIONAL trailing battery-percent field may follow the payload.
-        if kind == "hip" and parts[0] == "hip" and len(parts) >= 7:
-            STATE["hip"]["t_ms"] = int(float(parts[2]))
-            STATE["hip"]["q"] = [float(v) for v in parts[3:7]]
-            if len(parts) >= 8:
-                STATE["hip"]["batt"] = float(parts[7])
-            _mark("hip")
-        elif kind == "knee" and parts[0].lstrip("-").isdigit() and len(parts) >= 11:
-            STATE["knee"]["t_ms"] = int(float(parts[1]))
-            STATE["knee"]["angle"] = float(parts[2])
-            STATE["knee"]["q_thigh"] = [float(v) for v in parts[3:7]]
-            STATE["knee"]["q_shank"] = [float(v) for v in parts[7:11]]
-            if len(parts) >= 12:
-                STATE["knee"]["batt"] = float(parts[11])
-            _mark("knee")
-        elif kind == "feet" and parts[0] in ("foot_left", "foot_right") and len(parts) >= 19:
-            side = "left" if parts[0] == "foot_left" else "right"
-            STATE["feet"][side]["t_ms"] = int(float(parts[2]))
-            STATE["feet"][side]["c"] = [int(float(v)) for v in parts[3:19]]
-            if len(parts) >= 20:
-                STATE["feet"][side]["batt"] = float(parts[19])
-            _mark("foot_" + side)
-    except ValueError:
-        return
-
-
-def _udp_listener(port: int, kind: str) -> None:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        s.bind(("0.0.0.0", port))
-    except OSError as exc:
-        print(f"# UDP {port} ({kind}) bind failed: {exc}")
-        return
-    print(f"# listening for {kind} on UDP :{port}")
-    while True:
-        try:
-            data, _addr = s.recvfrom(2048)
-        except OSError:
-            continue
-        for line in data.decode("ascii", "ignore").splitlines():
-            _handle_line(kind, line)
-
-
-def _snapshot() -> dict:
-    now = time.monotonic()
-
-    def age(key):
-        t = _last.get(key)
-        return None if t is None else round(now - t, 2)
-
-    return {
-        "t": round(now, 3),
-        "hip":  {**STATE["hip"], "age": age("hip")},
-        "knee": {**STATE["knee"], "age": age("knee")},
-        "feet": {"left":  {**STATE["feet"]["left"],  "age": age("foot_left")},
-                 "right": {**STATE["feet"]["right"], "age": age("foot_right")}},
-    }
+# Shared secret relay.py must present to POST /api/ingest. Unset on Render ->
+# ingest endpoint stays disabled (LAN-direct UDP still works either way).
+RELAY_KEY = os.environ.get("RELAY_KEY")
 
 
 def _foot_layout() -> dict:
@@ -138,15 +63,15 @@ _clients: set[WebSocket] = set()
 
 @app.on_event("startup")
 async def _startup() -> None:
-    for port, kind in ((PORT_HIP, "hip"), (PORT_KNEE, "knee"), (PORT_FEET, "feet")):
-        threading.Thread(target=_udp_listener, args=(port, kind), daemon=True).start()
+    for port, kind in ((ingest.PORT_HIP, "hip"), (ingest.PORT_KNEE, "knee"), (ingest.PORT_FEET, "feet")):
+        threading.Thread(target=ingest._udp_listener, args=(port, kind), daemon=True).start()
     asyncio.create_task(_broadcaster())
 
 
 async def _broadcaster() -> None:
     while True:
         if _clients:
-            msg = json.dumps(_snapshot())
+            msg = json.dumps(ingest.snapshot())
             for ws in list(_clients):
                 try:
                     await ws.send_text(msg)
@@ -158,6 +83,17 @@ async def _broadcaster() -> None:
 @app.get("/api/layout")
 def api_layout() -> dict:
     return _foot_layout()
+
+
+@app.post("/api/ingest")
+async def api_ingest(request: Request) -> dict:
+    """Receives snapshots forwarded by relay.py when this backend is hosted
+    remotely and can't hear the sensor nodes' local UDP broadcast directly."""
+    if not RELAY_KEY or request.headers.get("x-relay-key") != RELAY_KEY:
+        raise HTTPException(status_code=403, detail="bad or missing relay key")
+    payload = await request.json()
+    ingest.apply_remote_snapshot(payload)
+    return {"ok": True}
 
 
 @app.websocket("/ws")
