@@ -23,8 +23,8 @@ const BONE = {
 const KNEE_AXIS = new THREE.Vector3(1, 0, 0)
 const KNEE_SIGN = 1
 
-export default function GaitAvatar({ kneeLDeg, kneeRDeg, hipTiltDeg }) {
-  const { scene } = useGLTF('/Xbot.glb')
+export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg }) {
+  const { scene } = useGLTF(modelPath)
   // Clone the skinned scene so this component can mount more than once (React
   // strict-mode double-invoke, future multi-view) without fighting over one
   // shared skeleton - the standard pattern for reusing a skinned glTF.
@@ -69,4 +69,7 @@ export default function GaitAvatar({ kneeLDeg, kneeRDeg, hipTiltDeg }) {
   return <primitive object={clone} />
 }
 
+// Only the default skin is preloaded eagerly; the others (also a few MB each)
+// load on demand when picked, via the same Suspense boundary GaitView already
+// wraps this in.
 useGLTF.preload('/Xbot.glb')
