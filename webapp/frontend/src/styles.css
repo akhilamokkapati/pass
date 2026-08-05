@@ -105,6 +105,10 @@ body {
 .cue { margin-top: 8px; color: var(--muted); font-size: 14px; min-height: 20px; }
 .cue.good { color: var(--ok); font-weight: 700; }
 
+.cal-btn { margin-top: 12px; padding: 7px 14px; font-size: 12.5px; }
+.cal-btn.on { color: var(--warn); border-color: #6b5420; background: #241d0f; }
+.cal-msg { margin-top: 6px; color: var(--warn); font-size: 12px; max-width: 220px; }
+
 /* ---- balance bar ---- */
 .balance { width: 100%; margin-top: 26px; }
 .balance-track { position: relative; height: 32px; border-radius: 999px; overflow: hidden; display: flex; border: 1px solid var(--line); }

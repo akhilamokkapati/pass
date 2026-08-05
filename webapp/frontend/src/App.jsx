@@ -9,7 +9,7 @@ const KNEE_TARGET = 60
 
 export default function App() {
   const { snap, connected } = useSocket()
-  const { m, zeroHip, resetReps } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
+  const { m, zeroHip, resetReps, calibrateKnee } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
   const [mode, setMode] = useState(() => localStorage.getItem('pass_mode') || 'patient')
   const pick = (x) => { setMode(x); localStorage.setItem('pass_mode', x) }
   const anyLive = !!m?.anyLive
@@ -44,7 +44,7 @@ export default function App() {
       )}
 
       {mode === 'patient'
-        ? <PatientView m={m} kneeTarget={KNEE_TARGET} />
+        ? <PatientView m={m} kneeTarget={KNEE_TARGET} onCalibrate={calibrateKnee} />
         : <ClinicianView m={m} snap={snap} />}
 
       <div className="actions">
