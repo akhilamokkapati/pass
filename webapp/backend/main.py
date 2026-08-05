@@ -8,6 +8,7 @@ the built React app. Two ways readings get in:
       feet  -> UDP :5006   foot_left / foot_right : 16 pressure channels (inverted)
       knee  -> UDP :5005   knee_left / knee_right : seq,t_ms,angle,qthigh(4),qshank(4)
       hip   -> UDP :5004   hip,seq,t_ms,q(4)   pelvis quaternion
+      actuation -> UDP :5007 (in) telemetry, :5008 (out) commands - see ingest.send_command
   - POST /api/ingest, from relay.py, when this runs remotely (e.g. Render) and
     a relay on the LAN forwards readings over HTTPS instead.
 
@@ -63,7 +64,8 @@ _clients: set[WebSocket] = set()
 
 @app.on_event("startup")
 async def _startup() -> None:
-    for port, kind in ((ingest.PORT_HIP, "hip"), (ingest.PORT_KNEE, "knee"), (ingest.PORT_FEET, "feet")):
+    for port, kind in ((ingest.PORT_HIP, "hip"), (ingest.PORT_KNEE, "knee"), (ingest.PORT_FEET, "feet"),
+                       (ingest.PORT_ACTUATION, "actuation")):
         threading.Thread(target=ingest._udp_listener, args=(port, kind), daemon=True).start()
     asyncio.create_task(_broadcaster())
 
@@ -94,6 +96,23 @@ async def api_ingest(request: Request) -> dict:
     payload = await request.json()
     ingest.apply_remote_snapshot(payload)
     return {"ok": True}
+
+
+@app.post("/api/actuation/command")
+async def api_actuation_command(request: Request) -> dict:
+    """Send a command to the actuation board. Only works when THIS process is
+    running on the same LAN as the board (broadcasts on the local subnet,
+    same as ingest's UDP listeners) - calling this on the Render deployment
+    is a no-op right now, since the cloud has no path to the board yet. That
+    remote path (proxying through relay.py) isn't built - this just proves
+    the local laptop -> board command loop works."""
+    body = await request.json()
+    cmd = body.get("cmd")
+    value = float(body.get("value", 0))
+    if not cmd:
+        raise HTTPException(status_code=400, detail="missing 'cmd'")
+    ingest.send_command(cmd, value)
+    return {"ok": True, "cmd": cmd, "value": value}
 
 
 @app.websocket("/ws")

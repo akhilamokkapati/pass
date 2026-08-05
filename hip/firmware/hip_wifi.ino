@@ -73,13 +73,17 @@ bool initSensor() {
         delay(PRE_ENABLE_MS);
         imu.enableGameRotationVector(REPORT_MS);
         delay(POST_ENABLE_MS);
-        Serial.print("# hip BNO085 found at 0x"); Serial.println(addrs[a], HEX);
+        // Serial.print can BLOCK on native USB-CDC if nothing has the port open
+        // and reading - guard every print with `if (Serial)` so a board running
+        // untethered (no laptop watching) can never stall its own WiFi loop on
+        // an unread serial write. Found via the actuation board's downlink test.
+        if (Serial) { Serial.print("# hip BNO085 found at 0x"); Serial.println(addrs[a], HEX); }
         return true;
       }
       delay(BEGIN_RETRY_MS);
     }
   }
-  Serial.println("# hip BNO085 NOT FOUND (check SDA=D4/SCL=D5, 3V3, PS0/PS1->GND, ADO)");
+  if (Serial) Serial.println("# hip BNO085 NOT FOUND (check SDA=D4/SCL=D5, 3V3, PS0/PS1->GND, ADO)");
   return false;
 }
 
@@ -105,16 +109,18 @@ void setup() {
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_VBAT, ADC_11db);
 #endif
-  Serial.println("# PASS hip IMU bring-up (wireless)");
+  if (Serial) Serial.println("# PASS hip IMU bring-up (wireless)");
 
   // Block-and-wait for the join here (proven feet pattern); sensor inits after.
   wifiBegin();
   uint32_t wt0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - wt0 < 20000) delay(250);
-  Serial.print("# hip wifi ");
-  Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED (auto-retrying) ");
-  Serial.print(WiFi.localIP());
-  Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+  if (Serial) {
+    Serial.print("# hip wifi ");
+    Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED (auto-retrying) ");
+    Serial.print(WiFi.localIP());
+    Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+  }
   WiFi.setSleep(false);      // keep radio awake -> smooth 50 Hz, no "stale" gaps
   udp.begin(UDP_PORT);
 
@@ -123,7 +129,7 @@ void setup() {
 
   uint32_t now = millis();
   lastReport = now; lastHealth = now;
-  Serial.println("# streaming: hip,seq,t_ms,qw,qx,qy,qz");
+  if (Serial) Serial.println("# streaming: hip,seq,t_ms,qw,qx,qy,qz");
 }
 
 void loop() {
@@ -143,12 +149,12 @@ void loop() {
   if (imuOk && (now - lastReport) > SILENT_TIMEOUT_MS) {
     imu.enableGameRotationVector(REPORT_MS);
     lastReport = now;
-    Serial.println("# WARN hip silent >1s, re-enabling game rotation vector");
+    if (Serial) Serial.println("# WARN hip silent >1s, re-enabling game rotation vector");
   }
 
   if (now - lastHealth >= HEALTH_MS) {
     lastHealth = now;
-    Serial.print("# health hip_reports="); Serial.println(reportCount);
+    if (Serial) { Serial.print("# health hip_reports="); Serial.println(reportCount); }
   }
 
   if (now - lastEmit >= EMIT_MS) {
@@ -164,7 +170,7 @@ void loop() {
     pct = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
     snprintf(line + n, sizeof(line) - n, ",%d", pct);    // trailing battery percent
 #endif
-    Serial.println(line);                        // wired fallback
+    if (Serial) Serial.println(line);             // wired fallback (guarded: see initSensor note)
     udp.beginPacket(dest, UDP_PORT);             // wireless
     udp.write((const uint8_t*)line, strlen(line));
     udp.write((uint8_t)'\n');

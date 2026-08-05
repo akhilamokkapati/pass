@@ -60,6 +60,8 @@ def _fresh_parts() -> dict:
         feet["right"] = snap["feet"]["right"]
     if feet:
         out["feet"] = feet
+    if snap["actuation"]["age"] is not None and snap["actuation"]["age"] < STALE_S:
+        out["actuation"] = snap["actuation"]
     return out
 
 
@@ -100,10 +102,11 @@ def main() -> None:
     if not args.url or not args.key:
         raise SystemExit("Need --url and --key (or PASS_RELAY_URL / RELAY_KEY env vars)")
 
-    for port, kind in ((ingest.PORT_HIP, "hip"), (ingest.PORT_KNEE, "knee"), (ingest.PORT_FEET, "feet")):
+    for port, kind in ((ingest.PORT_HIP, "hip"), (ingest.PORT_KNEE, "knee"), (ingest.PORT_FEET, "feet"),
+                       (ingest.PORT_ACTUATION, "actuation")):
         threading.Thread(target=ingest._udp_listener, args=(port, kind), daemon=True).start()
 
-    print(f"# relay: listening for hip/knee/feet UDP, pushing live parts to {args.url}")
+    print(f"# relay: listening for hip/knee/feet/actuation UDP, pushing live parts to {args.url}")
     _push_loop(args.url, args.key)
 
 

@@ -5,15 +5,14 @@
 const STALE = 1.5
 const fresh = (age) => age != null && age < STALE
 
-// The full 6-node platform. `get` pulls that node's slice from the snapshot;
-// nodes not yet wired in (actuation) return null and read offline.
+// The full 6-node platform. `get` pulls that node's slice from the snapshot.
 const DEVICES = [
   { key: 'lf', name: 'Left foot', get: (s) => s?.feet?.left },
   { key: 'rf', name: 'Right foot', get: (s) => s?.feet?.right },
   { key: 'lk', name: 'Left knee', get: (s) => s?.knee?.left },
   { key: 'rk', name: 'Right knee', get: (s) => s?.knee?.right },
   { key: 'hip', name: 'Hip', get: (s) => s?.hip },
-  { key: 'act', name: 'Actuation', get: () => null },
+  { key: 'act', name: 'Actuation', get: (s) => s?.actuation },
 ]
 
 function Battery({ pct }) {

@@ -89,10 +89,16 @@ void connectWifi() {
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(250);
   dest.fromString(DEST_IP);
-  Serial.print("# " UNIT_ID " wifi ");
-  Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED ");
-  Serial.print(WiFi.localIP());
-  Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+  // Serial.print can BLOCK on native USB-CDC if nothing has the port open and
+  // reading - guard every print with `if (Serial)` so a board running
+  // untethered (no laptop watching) can never stall its own WiFi loop on an
+  // unread serial write. Found via the actuation board's downlink test.
+  if (Serial) {
+    Serial.print("# " UNIT_ID " wifi ");
+    Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED ");
+    Serial.print(WiFi.localIP());
+    Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+  }
 }
 
 void setup() {
@@ -132,11 +138,13 @@ void loop() {
     lastBatt = now;
     float v = readBatteryVoltage();
     battPct = getLiPoPercentage(v);
-    Serial.print("# wifi "); Serial.print(WiFi.status() == WL_CONNECTED ? "UP " : "DOWN ");
-    Serial.print(WiFi.localIP());
-    Serial.print("  rssi "); Serial.print(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0); Serial.print(" dBm");
-    Serial.print("  battery "); Serial.print(v, 3);
-    Serial.print(" V  "); Serial.print(battPct); Serial.println(" %");
+    if (Serial) {
+      Serial.print("# wifi "); Serial.print(WiFi.status() == WL_CONNECTED ? "UP " : "DOWN ");
+      Serial.print(WiFi.localIP());
+      Serial.print("  rssi "); Serial.print(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0); Serial.print(" dBm");
+      Serial.print("  battery "); Serial.print(v, 3);
+      Serial.print(" V  "); Serial.print(battPct); Serial.println(" %");
+    }
   }
 
   if (now - lastSend >= SEND_MS) {

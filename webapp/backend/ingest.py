@@ -20,6 +20,8 @@ import time
 PORT_FEET = 5006
 PORT_KNEE = 5005
 PORT_HIP = 5004
+PORT_ACTUATION = 5007       # telemetry OUT: actuation board -> laptop (this listener)
+PORT_ACTUATION_CMD = 5008   # commands IN: laptop -> actuation board (see send_command)
 
 _KNEE_DEFAULT = {"angle": 0.0, "q_thigh": [1.0, 0, 0, 0], "q_shank": [1.0, 0, 0, 0], "t_ms": 0, "batt": None}
 
@@ -29,6 +31,10 @@ STATE = {
              "right": dict(_KNEE_DEFAULT)},
     "feet": {"left":  {"c": [0] * 16, "t_ms": 0, "batt": None},
              "right": {"c": [0] * 16, "t_ms": 0, "batt": None}},
+    # tension/state are placeholders until the strain gauge + motor are wired
+    # (see actuation/Actuation Context.md) - the firmware sends 0.0/"idle" for
+    # now, just enough for the dashboard to show the board online.
+    "actuation": {"tension_n": 0.0, "state": "idle", "t_ms": 0, "batt": None},
 }
 _last: dict[str, float] = {}   # key -> monotonic time of last packet
 
@@ -58,6 +64,13 @@ def _handle_line(kind: str, line: str) -> None:
             if len(parts) >= 13:
                 STATE["knee"][side]["batt"] = float(parts[12])
             _mark("knee_" + side)
+        elif kind == "actuation" and parts[0] == "actuation" and len(parts) >= 5:
+            STATE["actuation"]["t_ms"] = int(float(parts[2]))
+            STATE["actuation"]["tension_n"] = float(parts[3])
+            STATE["actuation"]["state"] = parts[4]
+            if len(parts) >= 6:
+                STATE["actuation"]["batt"] = float(parts[5])
+            _mark("actuation")
         elif kind == "feet" and parts[0] in ("foot_left", "foot_right") and len(parts) >= 19:
             side = "left" if parts[0] == "foot_left" else "right"
             STATE["feet"][side]["t_ms"] = int(float(parts[2]))
@@ -101,6 +114,7 @@ def snapshot() -> dict:
                  "right": {**STATE["knee"]["right"], "age": age("knee_right")}},
         "feet": {"left":  {**STATE["feet"]["left"],  "age": age("foot_left")},
                  "right": {**STATE["feet"]["right"], "age": age("foot_right")}},
+        "actuation": {**STATE["actuation"], "age": age("actuation")},
     }
 
 
@@ -125,3 +139,19 @@ def apply_remote_snapshot(payload: dict) -> None:
     if "right" in feet:
         STATE["feet"]["right"].update({k: v for k, v in feet["right"].items() if k != "age"})
         _mark("foot_right")
+    if "actuation" in payload:
+        STATE["actuation"].update({k: v for k, v in payload["actuation"].items() if k != "age"})
+        _mark("actuation")
+
+
+def send_command(cmd: str, value: float = 0.0) -> None:
+    """Broadcast a command line to the actuation board. Only reaches it when
+    called from a process on the same LAN (the local backend, or relay.py) -
+    client isolation being off on the router is what makes this reach the
+    board at all; see the downlink test this replaced. Line format matches
+    the telemetry convention: unit_id-prefixed, comma-separated."""
+    line = f"actuation,{cmd},{value}".encode()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    s.sendto(line, ("192.168.0.255", PORT_ACTUATION_CMD))
+    s.close()

@@ -111,19 +111,27 @@ bool initSensor(BNO080 &imu, uint8_t addr, const char *name) {
       delay(PRE_ENABLE_MS);
       imu.enableGameRotationVector(REPORT_MS);
       delay(POST_ENABLE_MS);
-      Serial.print("# ");
-      Serial.print(name);
-      Serial.print(" BNO085 found at 0x");
-      Serial.println(addr, HEX);
+      // Serial.print can BLOCK on native USB-CDC if nothing has the port open
+      // and reading - guard every print with `if (Serial)` so a board running
+      // untethered (no laptop watching) can never stall its own WiFi loop on
+      // an unread serial write. Found via the actuation board's downlink test.
+      if (Serial) {
+        Serial.print("# ");
+        Serial.print(name);
+        Serial.print(" BNO085 found at 0x");
+        Serial.println(addr, HEX);
+      }
       return true;
     }
     delay(BEGIN_RETRY_MS);
   }
-  Serial.print("# ");
-  Serial.print(name);
-  Serial.print(" BNO085 NOT FOUND at 0x");
-  Serial.print(addr, HEX);
-  Serial.println("  (check ADO strap, PS0/PS1->GND, 3V3, SDA/SCL)");
+  if (Serial) {
+    Serial.print("# ");
+    Serial.print(name);
+    Serial.print(" BNO085 NOT FOUND at 0x");
+    Serial.print(addr, HEX);
+    Serial.println("  (check ADO strap, PS0/PS1->GND, 3V3, SDA/SCL)");
+  }
   return false;
 }
 
@@ -147,17 +155,19 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, !LED_ON);   // off until we know the WiFi state
 
-  Serial.println("# PASS " UNIT_ID " IMU bring-up (wireless)");
+  if (Serial) Serial.println("# PASS " UNIT_ID " IMU bring-up (wireless)");
 
   // Block-and-wait for the join here (like the feet firmware that works), giving
   // the association uninterrupted time. Sensors init AFTER, so nothing is starved.
   wifiBegin();
   uint32_t wt0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - wt0 < 20000) delay(250);
-  Serial.print("# " UNIT_ID " wifi ");
-  Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED (auto-retrying) ");
-  Serial.print(WiFi.localIP());
-  Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+  if (Serial) {
+    Serial.print("# " UNIT_ID " wifi ");
+    Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED (auto-retrying) ");
+    Serial.print(WiFi.localIP());
+    Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+  }
   WiFi.setSleep(false);      // keep radio awake -> smooth stream, no "stale" gaps
   WiFi.setTxPower(WIFI_POWER_19_5dBm);   // force max TX power
   udp.begin(UDP_PORT);
@@ -172,7 +182,7 @@ void setup() {
   shankLastReport = now;
   lastHealth = now;
 
-  Serial.println("# streaming: " UNIT_ID ",seq,t_ms,knee_angle_deg,qtw,qtx,qty,qtz,qsw,qsx,qsy,qsz");
+  if (Serial) Serial.println("# streaming: " UNIT_ID ",seq,t_ms,knee_angle_deg,qtw,qtx,qty,qtz,qsw,qsx,qsy,qsz");
 }
 
 void loop() {
@@ -189,9 +199,11 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     if (!wifiWasUp) {
       wifiWasUp = true;
-      Serial.print("# " UNIT_ID " wifi JOINED ");
-      Serial.print(WiFi.localIP());
-      Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+      if (Serial) {
+        Serial.print("# " UNIT_ID " wifi JOINED ");
+        Serial.print(WiFi.localIP());
+        Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+      }
     }
   } else {
     wifiWasUp = false;                    // auto-reconnect handles the retry
@@ -221,32 +233,34 @@ void loop() {
   if (thighOk && (now - thighLastReport) > SILENT_TIMEOUT_MS) {
     thigh.enableGameRotationVector(REPORT_MS);
     thighLastReport = now;
-    Serial.println("# WARN thigh silent >1s, re-enabling game rotation vector");
+    if (Serial) Serial.println("# WARN thigh silent >1s, re-enabling game rotation vector");
   }
   if (shankOk && (now - shankLastReport) > SILENT_TIMEOUT_MS) {
     shank.enableGameRotationVector(REPORT_MS);
     shankLastReport = now;
-    Serial.println("# WARN shank silent >1s, re-enabling game rotation vector");
+    if (Serial) Serial.println("# WARN shank silent >1s, re-enabling game rotation vector");
   }
 
   if (now - lastHealth >= HEALTH_MS) {
     lastHealth = now;
-    Serial.print("# health thigh_reports=");
-    Serial.print(thighCount);
-    Serial.print(" shank_reports=");
-    Serial.print(shankCount);
-    Serial.print("  wifi ");
-    Serial.print(WiFi.status() == WL_CONNECTED ? "UP" : "DOWN");
-    Serial.print("  rssi ");
-    Serial.print(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0);
-    Serial.print(" dBm  udp begin ok=");
-    Serial.print(udpBeginOk);
-    Serial.print(" fail=");
-    Serial.print(udpBeginFail);
-    Serial.print("  end ok=");
-    Serial.print(udpEndOk);
-    Serial.print(" fail=");
-    Serial.println(udpEndFail);
+    if (Serial) {
+      Serial.print("# health thigh_reports=");
+      Serial.print(thighCount);
+      Serial.print(" shank_reports=");
+      Serial.print(shankCount);
+      Serial.print("  wifi ");
+      Serial.print(WiFi.status() == WL_CONNECTED ? "UP" : "DOWN");
+      Serial.print("  rssi ");
+      Serial.print(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0);
+      Serial.print(" dBm  udp begin ok=");
+      Serial.print(udpBeginOk);
+      Serial.print(" fail=");
+      Serial.print(udpBeginFail);
+      Serial.print("  end ok=");
+      Serial.print(udpEndOk);
+      Serial.print(" fail=");
+      Serial.println(udpEndFail);
+    }
   }
 
   // Emit at a steady cadence: build the line once, send it BOTH ways (serial
@@ -261,7 +275,7 @@ void loop() {
              (unsigned long)seq, (unsigned long)now, roughKneeAngleDeg(),
              tw, tx, ty, tz, sw, sx, sy, sz);
 
-    Serial.println(line);                       // wired fallback
+    if (Serial) Serial.println(line);            // wired fallback (guarded: see initSensor note)
 
     int beginOk = udp.beginPacket(dest, UDP_PORT);   // wireless to the laptop
     if (beginOk) { udpBeginOk++; } else { udpBeginFail++; }
