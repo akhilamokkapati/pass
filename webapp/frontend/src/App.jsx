@@ -3,6 +3,7 @@ import { useSocket } from './useSocket.js'
 import { useMetrics } from './useMetrics.js'
 import PatientView from './PatientView.jsx'
 import ClinicianView from './ClinicianView.jsx'
+import GaitView from './GaitView.jsx'
 import DevicesPanel from './DevicesPanel.jsx'
 
 const KNEE_TARGET = 60
@@ -25,6 +26,7 @@ export default function App() {
           <div className="modeswitch">
             <button className={mode === 'patient' ? 'on' : ''} onClick={() => pick('patient')}>Patient</button>
             <button className={mode === 'clinician' ? 'on' : ''} onClick={() => pick('clinician')}>Clinician</button>
+            <button className={mode === 'gait' ? 'on' : ''} onClick={() => pick('gait')}>Gait</button>
           </div>
           <div className={`conn ${connected ? 'on' : 'off'}`}
             title="Link between this page and the PASS server (not the sensors)">
@@ -43,9 +45,9 @@ export default function App() {
         </div>
       )}
 
-      {mode === 'patient'
-        ? <PatientView m={m} kneeTarget={KNEE_TARGET} />
-        : <ClinicianView m={m} snap={snap} />}
+      {mode === 'patient' && <PatientView m={m} kneeTarget={KNEE_TARGET} />}
+      {mode === 'clinician' && <ClinicianView m={m} snap={snap} />}
+      {mode === 'gait' && <GaitView m={m} />}
 
       <div className="actions">
         <button className="btn ghost" onClick={zeroHip}>Zero hip (stand tall)</button>

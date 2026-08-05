@@ -137,6 +137,11 @@ body {
 .stat-val span { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 3px; }
 .stat-label { color: var(--muted); font-size: 12px; margin-top: 2px; }
 
+/* ---- 3D gait view ---- */
+.gait-canvas-wrap { position: relative; height: 70vh; min-height: 420px; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 12px 36px #0008; }
+.gait-canvas-wrap canvas { display: block; }
+.gait-hint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: var(--muted); font-size: 13px; background: #0009; padding: 8px 14px; border-radius: 999px; pointer-events: none; }
+
 /* ---- feet ---- */
 .feet-card { margin-top: 12px; }
 .feet-row { display: flex; gap: 10px; justify-content: center; margin-top: 6px; }
