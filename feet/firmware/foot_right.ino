@@ -133,7 +133,9 @@ void loop() {
     float v = readBatteryVoltage();
     battPct = getLiPoPercentage(v);
     Serial.print("# wifi "); Serial.print(WiFi.status() == WL_CONNECTED ? "UP " : "DOWN ");
-    Serial.print(WiFi.localIP()); Serial.print("  battery "); Serial.print(v, 3);
+    Serial.print(WiFi.localIP());
+    Serial.print("  rssi "); Serial.print(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0); Serial.print(" dBm");
+    Serial.print("  battery "); Serial.print(v, 3);
     Serial.print(" V  "); Serial.print(battPct); Serial.println(" %");
   }
 

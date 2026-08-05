@@ -54,6 +54,7 @@ IPAddress dest;
 uint32_t frame = 0, lastSample = 0, lastSend = 0, lastBatt = 0, lastWifiTry = 0;
 int inv[16];
 int battPct = 0;
+uint32_t udpBeginOk = 0, udpBeginFail = 0, udpEndOk = 0, udpEndFail = 0;
 
 void selCh(uint8_t c) {
   for (uint8_t i = 0; i < 4; i++) digitalWrite(SEL[i], (c >> i) & 1);
@@ -139,8 +140,12 @@ void loop() {
     float v = readBatteryVoltage();
     battPct = getLiPoPercentage(v);
     Serial.print("# wifi "); Serial.print(WiFi.status() == WL_CONNECTED ? "UP " : "DOWN ");
-    Serial.print(WiFi.localIP()); Serial.print("  battery "); Serial.print(v, 3);
-    Serial.print(" V  "); Serial.print(battPct); Serial.println(" %");   // watch to set VBAT_CAL
+    Serial.print(WiFi.localIP());
+    Serial.print("  rssi "); Serial.print(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0); Serial.print(" dBm");
+    Serial.print("  battery "); Serial.print(v, 3);
+    Serial.print(" V  "); Serial.print(battPct); Serial.print(" %");
+    Serial.print("  udp begin ok="); Serial.print(udpBeginOk); Serial.print(" fail="); Serial.print(udpBeginFail);
+    Serial.print("  end ok="); Serial.print(udpEndOk); Serial.print(" fail="); Serial.println(udpEndFail);
   }
 
   if (now - lastSend >= SEND_MS) {
@@ -151,9 +156,11 @@ void loop() {
     for (uint8_t c = 0; c < 16; c++)
       n += snprintf(p + n, sizeof(p) - n, ",%d", inv[c]);
     n += snprintf(p + n, sizeof(p) - n, ",%d", battPct);   // trailing battery percent
-    udp.beginPacket(dest, UDP_PORT);
+    int beginOk = udp.beginPacket(dest, UDP_PORT);
+    if (beginOk) { udpBeginOk++; } else { udpBeginFail++; }
     udp.write((const uint8_t *)p, strlen(p));
-    udp.endPacket();
+    int endOk = udp.endPacket();
+    if (endOk) { udpEndOk++; } else { udpEndFail++; }
     frame++;
   }
 }

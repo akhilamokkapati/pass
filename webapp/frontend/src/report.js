@@ -13,16 +13,23 @@ function sparkSvg(vals, color) {
 
 export function downloadReport(m) {
   const hist = m?.hist || []
-  const kv = hist.map((h) => h.knee).filter((x) => x != null)
-  const romMax = kv.length ? Math.max(...kv) : null
-  const romMin = kv.length ? Math.min(...kv) : null
-  const rom = romMax != null ? romMax - romMin : null
+  const kneeBox = (key, angleKey, reps, color) => {
+    const kv = hist.map((h) => h[key]).filter((x) => x != null)
+    const romMax = kv.length ? Math.max(...kv) : null
+    const romMin = kv.length ? Math.min(...kv) : null
+    const rom = romMax != null ? romMax - romMin : null
+    return { kv, romMax, rom,
+      row: `${box(f(m?.[angleKey], 1) + ' deg', 'current')}${box(f(rom, 0) + ' deg', 'ROM')}${box(f(romMax, 0) + ' deg', 'max flexion')}${box(reps ?? 0, 'reps')}`,
+      spark: sparkSvg(kv, color) }
+  }
   const total = (m?.loadL || 0) + (m?.loadR || 0)
   const sym = total > 60 ? Math.round((m.loadL / total) * 100) : null
   const f = (v, d = 0) => (v == null ? '--' : (+v).toFixed(d))
   const now = new Date()
 
   const box = (val, lbl) => `<div class=box><div class=val>${val}</div><div class=lbl>${lbl}</div></div>`
+  const kneeL = kneeBox('kneeL', 'kneeLAngle', m?.repsL, '#2b6fd6')
+  const kneeR = kneeBox('kneeR', 'kneeRAngle', m?.repsR, '#f6774b')
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>PASS session report</title>
 <style>
@@ -37,9 +44,12 @@ export function downloadReport(m) {
  <h1>PASS session report</h1>
  <div class=muted>Generated ${now.toLocaleString()}</div>
  <button class="btn noprint" onclick="window.print()">Save as PDF / print</button>
- <h2>Knee flexion</h2>
- <div class=row>${box(f(m?.kneeAngle, 1) + ' deg', 'current')}${box(f(rom, 0) + ' deg', 'ROM')}${box(f(romMax, 0) + ' deg', 'max flexion')}${box(m?.reps ?? 0, 'reps')}</div>
- <div style="margin-top:10px">${sparkSvg(kv, '#2b6fd6')}</div>
+ <h2>Left knee flexion</h2>
+ <div class=row>${kneeL.row}</div>
+ <div style="margin-top:10px">${kneeL.spark}</div>
+ <h2>Right knee flexion</h2>
+ <div class=row>${kneeR.row}</div>
+ <div style="margin-top:10px">${kneeR.spark}</div>
  <h2>Pelvis tilt</h2>
  <div class=row>${box(f(m?.hipTilt, 1) + ' deg', 'tilt from neutral')}</div>
  <div style="margin-top:10px">${sparkSvg(hist.map((h) => h.hip), '#c8890f')}</div>

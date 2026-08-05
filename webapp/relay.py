@@ -46,8 +46,13 @@ def _fresh_parts() -> dict:
     out: dict = {}
     if snap["hip"]["age"] is not None and snap["hip"]["age"] < STALE_S:
         out["hip"] = snap["hip"]
-    if snap["knee"]["age"] is not None and snap["knee"]["age"] < STALE_S:
-        out["knee"] = snap["knee"]
+    knee: dict = {}
+    if snap["knee"]["left"]["age"] is not None and snap["knee"]["left"]["age"] < STALE_S:
+        knee["left"] = snap["knee"]["left"]
+    if snap["knee"]["right"]["age"] is not None and snap["knee"]["right"]["age"] < STALE_S:
+        knee["right"] = snap["knee"]["right"]
+    if knee:
+        out["knee"] = knee
     feet: dict = {}
     if snap["feet"]["left"]["age"] is not None and snap["feet"]["left"]["age"] < STALE_S:
         feet["left"] = snap["feet"]["left"]

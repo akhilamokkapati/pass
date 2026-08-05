@@ -21,13 +21,19 @@
 
 // ===== identity + network (same router as feet/knee) =====
 #define UNIT_ID   "hip"
-#define WIFI_SSID "30.007"
-#define WIFI_PASS "awesomesauce144"
+#define WIFI_SSID "TP-Link_1285"
+#define WIFI_PASS "15289346"
 // Broadcast to the whole 30.007 subnet, so the laptop receives no matter what IP
 // it or the node ends up with (removes the "laptop must be .100 / connect first"
 // trap). The receiver just binds the port.
 #define DEST_IP   "192.168.0.255"
 #define UDP_PORT  5004              // hip port (feet 5006, knee 5005)
+
+// ===== status LED =====
+// Onboard orange user LED on GPIO21 (active LOW: LOW = lit). Solid = joined WiFi,
+// blink = searching, off = not powered. No external wiring needed.
+#define LED_PIN 21
+#define LED_ON  LOW
 
 // ===== battery telemetry (optional) =====
 // The XIAO ESP32-S3 does NOT expose the LiPo voltage internally, so to report
@@ -93,6 +99,8 @@ void setup() {
 
   Wire.begin(D4, D5);        // XIAO I2C: SDA=D4, SCL=D5
   Wire.setClock(I2C_HZ);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, !LED_ON);   // off until we know the WiFi state
 #if ENABLE_BATTERY
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_VBAT, ADC_11db);
@@ -120,6 +128,10 @@ void setup() {
 
 void loop() {
   uint32_t now = millis();
+
+  // status LED: solid = joined, blinking = searching
+  if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LED_ON);
+  else digitalWrite(LED_PIN, ((now / 300) % 2) ? LED_ON : !LED_ON);
 
   if (imu.dataAvailable()) {
     qw = imu.getQuatReal(); qx = imu.getQuatI();

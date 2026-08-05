@@ -10,7 +10,8 @@ export const fresh = (age) => age != null && age < STALE
 // baselines and the hip zero in a ref so they persist across renders.
 export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   const S = useRef({
-    hist: [], baseL: {}, baseR: {}, hipRef: null, reps: 0, phase: 'down',
+    hist: [], baseL: {}, baseR: {}, hipRef: null,
+    repsL: 0, phaseL: 'down', repsR: 0, phaseR: 'down',
   })
   const [m, setM] = useState(null)
 
@@ -18,7 +19,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     if (!snap) return
     const s = S.current
     const { knee, hip, feet } = snap
-    const kneeOk = fresh(knee?.age)
+    const kneeLOk = fresh(knee?.left?.age)
+    const kneeROk = fresh(knee?.right?.age)
     const hipOk = fresh(hip?.age)
     const lOk = fresh(feet?.left?.age)
     const rOk = fresh(feet?.right?.age)
@@ -38,26 +40,32 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     if (s.hipRef == null && hipOk) s.hipRef = hip.q
     const hipTilt = hipOk && s.hipRef ? tiltDeg(s.hipRef, hip.q) : null
 
-    const kneeAngle = kneeOk ? knee.angle : null
+    const kneeLAngle = kneeLOk ? knee.left.angle : null
+    const kneeRAngle = kneeROk ? knee.right.angle : null
 
-    // knee rep counter: extended (<15) -> past 80% of target -> back to extended
-    if (kneeOk) {
-      if (s.phase === 'down' && kneeAngle > kneeTarget * 0.8) s.phase = 'up'
-      else if (s.phase === 'up' && kneeAngle < 15) { s.phase = 'down'; s.reps += 1 }
+    // knee rep counter (each side independent): extended (<15) -> past 80% of
+    // target -> back to extended
+    if (kneeLOk) {
+      if (s.phaseL === 'down' && kneeLAngle > kneeTarget * 0.8) s.phaseL = 'up'
+      else if (s.phaseL === 'up' && kneeLAngle < 15) { s.phaseL = 'down'; s.repsL += 1 }
+    }
+    if (kneeROk) {
+      if (s.phaseR === 'down' && kneeRAngle > kneeTarget * 0.8) s.phaseR = 'up'
+      else if (s.phaseR === 'up' && kneeRAngle < 15) { s.phaseR = 'down'; s.repsR += 1 }
     }
 
-    s.hist.push({ t: snap.t, knee: kneeAngle, hip: hipTilt, loadL, loadR })
+    s.hist.push({ t: snap.t, kneeL: kneeLAngle, kneeR: kneeRAngle, hip: hipTilt, loadL, loadR })
     if (s.hist.length > 900) s.hist.shift()
 
     setM({
-      kneeAngle, kneeOk, hipTilt, hipOk,
+      kneeLAngle, kneeLOk, kneeRAngle, kneeROk, hipTilt, hipOk,
       loadL, loadR, lOk, rOk,
-      reps: s.reps, hist: s.hist,
-      anyLive: kneeOk || hipOk || lOk || rOk,
+      repsL: s.repsL, repsR: s.repsR, hist: s.hist,
+      anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
     })
   }, [snap?.t, kneeTarget])
 
   const zeroHip = () => { S.current.hipRef = null }
-  const resetReps = () => { S.current.reps = 0 }
+  const resetReps = () => { S.current.repsL = 0; S.current.repsR = 0 }
   return { m, zeroHip, resetReps }
 }

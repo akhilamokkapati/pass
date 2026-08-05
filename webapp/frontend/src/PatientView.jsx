@@ -32,28 +32,36 @@ function BalanceBar({ m }) {
   )
 }
 
+function KneeCard({ title, ok, angle, reps, kneeTarget }) {
+  const reached = ok && angle >= kneeTarget
+  return (
+    <div className={`card center accent-knee ${ok ? '' : 'off'}`}>
+      <Head title={title} ok={ok} />
+      <Ring value={ok ? angle : null} max={kneeTarget} sub={`target ${kneeTarget}°`}
+        reached={reached} color="#4ea1ff" />
+      {ok ? (
+        <>
+          <div className="reps">{reps ?? 0}<span>reps</span></div>
+          <div className={`cue ${reached ? 'good' : ''}`}>
+            {reached ? 'Target reached' : 'Keep bending'}
+          </div>
+        </>
+      ) : <div className="cue">Waiting for sensor</div>}
+    </div>
+  )
+}
+
 export default function PatientView({ m, kneeTarget }) {
-  const kneeOk = !!m?.kneeOk
   const hipOk = !!m?.hipOk
   const feetOk = !!(m?.lOk || m?.rOk)
-  const kneeReached = kneeOk && m.kneeAngle >= kneeTarget
   const hipLevel = hipOk && m.hipTilt < 10
 
   return (
     <div className="grid patient">
-      <div className={`card center accent-knee ${kneeOk ? '' : 'off'}`}>
-        <Head title="Knee bend" ok={kneeOk} />
-        <Ring value={kneeOk ? m.kneeAngle : null} max={kneeTarget} sub={`target ${kneeTarget}°`}
-          reached={kneeReached} color="#4ea1ff" />
-        {kneeOk ? (
-          <>
-            <div className="reps">{m?.reps ?? 0}<span>reps</span></div>
-            <div className={`cue ${kneeReached ? 'good' : ''}`}>
-              {kneeReached ? 'Target reached' : 'Keep bending'}
-            </div>
-          </>
-        ) : <div className="cue">Waiting for sensor</div>}
-      </div>
+      <KneeCard title="Left knee bend" ok={!!m?.kneeLOk} angle={m?.kneeLAngle}
+        reps={m?.repsL} kneeTarget={kneeTarget} />
+      <KneeCard title="Right knee bend" ok={!!m?.kneeROk} angle={m?.kneeRAngle}
+        reps={m?.repsR} kneeTarget={kneeTarget} />
 
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />

@@ -21,9 +21,12 @@ PORT_FEET = 5006
 PORT_KNEE = 5005
 PORT_HIP = 5004
 
+_KNEE_DEFAULT = {"angle": 0.0, "q_thigh": [1.0, 0, 0, 0], "q_shank": [1.0, 0, 0, 0], "t_ms": 0, "batt": None}
+
 STATE = {
     "hip":  {"q": [1.0, 0, 0, 0], "t_ms": 0, "batt": None},
-    "knee": {"angle": 0.0, "q_thigh": [1.0, 0, 0, 0], "q_shank": [1.0, 0, 0, 0], "t_ms": 0, "batt": None},
+    "knee": {"left":  dict(_KNEE_DEFAULT),
+             "right": dict(_KNEE_DEFAULT)},
     "feet": {"left":  {"c": [0] * 16, "t_ms": 0, "batt": None},
              "right": {"c": [0] * 16, "t_ms": 0, "batt": None}},
 }
@@ -46,14 +49,15 @@ def _handle_line(kind: str, line: str) -> None:
             if len(parts) >= 8:
                 STATE["hip"]["batt"] = float(parts[7])
             _mark("hip")
-        elif kind == "knee" and parts[0].lstrip("-").isdigit() and len(parts) >= 11:
-            STATE["knee"]["t_ms"] = int(float(parts[1]))
-            STATE["knee"]["angle"] = float(parts[2])
-            STATE["knee"]["q_thigh"] = [float(v) for v in parts[3:7]]
-            STATE["knee"]["q_shank"] = [float(v) for v in parts[7:11]]
-            if len(parts) >= 12:
-                STATE["knee"]["batt"] = float(parts[11])
-            _mark("knee")
+        elif kind == "knee" and parts[0] in ("knee_left", "knee_right") and len(parts) >= 12:
+            side = "left" if parts[0] == "knee_left" else "right"
+            STATE["knee"][side]["t_ms"] = int(float(parts[2]))
+            STATE["knee"][side]["angle"] = float(parts[3])
+            STATE["knee"][side]["q_thigh"] = [float(v) for v in parts[4:8]]
+            STATE["knee"][side]["q_shank"] = [float(v) for v in parts[8:12]]
+            if len(parts) >= 13:
+                STATE["knee"][side]["batt"] = float(parts[12])
+            _mark("knee_" + side)
         elif kind == "feet" and parts[0] in ("foot_left", "foot_right") and len(parts) >= 19:
             side = "left" if parts[0] == "foot_left" else "right"
             STATE["feet"][side]["t_ms"] = int(float(parts[2]))
@@ -93,7 +97,8 @@ def snapshot() -> dict:
     return {
         "t": round(now, 3),
         "hip":  {**STATE["hip"], "age": age("hip")},
-        "knee": {**STATE["knee"], "age": age("knee")},
+        "knee": {"left":  {**STATE["knee"]["left"],  "age": age("knee_left")},
+                 "right": {**STATE["knee"]["right"], "age": age("knee_right")}},
         "feet": {"left":  {**STATE["feet"]["left"],  "age": age("foot_left")},
                  "right": {**STATE["feet"]["right"], "age": age("foot_right")}},
     }
@@ -106,9 +111,13 @@ def apply_remote_snapshot(payload: dict) -> None:
     if "hip" in payload:
         STATE["hip"].update({k: v for k, v in payload["hip"].items() if k != "age"})
         _mark("hip")
-    if "knee" in payload:
-        STATE["knee"].update({k: v for k, v in payload["knee"].items() if k != "age"})
-        _mark("knee")
+    knee = payload.get("knee", {})
+    if "left" in knee:
+        STATE["knee"]["left"].update({k: v for k, v in knee["left"].items() if k != "age"})
+        _mark("knee_left")
+    if "right" in knee:
+        STATE["knee"]["right"].update({k: v for k, v in knee["right"].items() if k != "age"})
+        _mark("knee_right")
     feet = payload.get("feet", {})
     if "left" in feet:
         STATE["feet"]["left"].update({k: v for k, v in feet["left"].items() if k != "age"})

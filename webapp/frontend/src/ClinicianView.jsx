@@ -12,24 +12,31 @@ function Stat({ label, value, unit }) {
   )
 }
 
-export default function ClinicianView({ m, snap }) {
-  const hist = m?.hist || []
-  const kneeVals = hist.map((h) => h.knee).filter((v) => v != null)
-  const romMax = kneeVals.length ? Math.max(...kneeVals) : null
-  const romMin = kneeVals.length ? Math.min(...kneeVals) : null
+function kneeSideStats(hist, key) {
+  const vals = hist.map((h) => h[key]).filter((v) => v != null)
+  const romMax = vals.length ? Math.max(...vals) : null
+  const romMin = vals.length ? Math.min(...vals) : null
   const rom = romMax != null ? romMax - romMin : null
   let vel = 0
   if (hist.length >= 2) {
     const a = hist[hist.length - 1]
     const b = hist[Math.max(0, hist.length - 6)]
-    if (a.knee != null && b.knee != null && a.t !== b.t) vel = Math.abs((a.knee - b.knee) / (a.t - b.t))
+    if (a[key] != null && b[key] != null && a.t !== b.t) vel = Math.abs((a[key] - b[key]) / (a.t - b.t))
   }
+  return { romMax, rom, vel }
+}
+
+export default function ClinicianView({ m, snap }) {
+  const hist = m?.hist || []
+  const left = kneeSideStats(hist, 'kneeL')
+  const right = kneeSideStats(hist, 'kneeR')
   const hipMax = hist.reduce((mx, h) => (h.hip != null ? Math.max(mx, h.hip) : mx), 0)
   const total = (m?.loadL || 0) + (m?.loadR || 0)
   const sym = total > 60 ? Math.round((m.loadL / total) * 100) : null
   const fmt = (v, d = 0) => (v == null ? '--' : v.toFixed(d))
 
-  const kneeOk = !!m?.kneeOk
+  const kneeLOk = !!m?.kneeLOk
+  const kneeROk = !!m?.kneeROk
   const hipOk = !!m?.hipOk
   const feetOk = !!(m?.lOk || m?.rOk)
 
@@ -43,14 +50,26 @@ export default function ClinicianView({ m, snap }) {
       </div>
 
       <section className="card accent-knee">
-        <div className="card-head"><h3>Knee flexion</h3><StatusPill ok={kneeOk} /></div>
-        <TimeChart data={hist} series={[{ key: 'knee', color: '#4ea1ff' }]} unit="°" windowS={25} />
+        <div className="card-head"><h3>Left knee flexion</h3><StatusPill ok={kneeLOk} /></div>
+        <TimeChart data={hist} series={[{ key: 'kneeL', color: '#4ea1ff' }]} unit="°" windowS={25} />
         <div className="stat-row">
-          <Stat label="current" value={fmt(m?.kneeAngle, 1)} unit="°" />
-          <Stat label="ROM" value={fmt(rom, 0)} unit="°" />
-          <Stat label="max flexion" value={fmt(romMax, 0)} unit="°" />
-          <Stat label="reps" value={m?.reps ?? 0} unit="" />
-          <Stat label="ang. velocity" value={fmt(vel, 0)} unit="°/s" />
+          <Stat label="current" value={fmt(m?.kneeLAngle, 1)} unit="°" />
+          <Stat label="ROM" value={fmt(left.rom, 0)} unit="°" />
+          <Stat label="max flexion" value={fmt(left.romMax, 0)} unit="°" />
+          <Stat label="reps" value={m?.repsL ?? 0} unit="" />
+          <Stat label="ang. velocity" value={fmt(left.vel, 0)} unit="°/s" />
+        </div>
+      </section>
+
+      <section className="card accent-knee">
+        <div className="card-head"><h3>Right knee flexion</h3><StatusPill ok={kneeROk} /></div>
+        <TimeChart data={hist} series={[{ key: 'kneeR', color: '#f6774b' }]} unit="°" windowS={25} />
+        <div className="stat-row">
+          <Stat label="current" value={fmt(m?.kneeRAngle, 1)} unit="°" />
+          <Stat label="ROM" value={fmt(right.rom, 0)} unit="°" />
+          <Stat label="max flexion" value={fmt(right.romMax, 0)} unit="°" />
+          <Stat label="reps" value={m?.repsR ?? 0} unit="" />
+          <Stat label="ang. velocity" value={fmt(right.vel, 0)} unit="°/s" />
         </div>
       </section>
 

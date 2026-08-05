@@ -6,7 +6,7 @@ the built React app. Two ways readings get in:
 
   - Direct UDP, when this runs on the same LAN as the sensor nodes:
       feet  -> UDP :5006   foot_left / foot_right : 16 pressure channels (inverted)
-      knee  -> UDP :5005   seq,t_ms,angle,qthigh(4),qshank(4)
+      knee  -> UDP :5005   knee_left / knee_right : seq,t_ms,angle,qthigh(4),qshank(4)
       hip   -> UDP :5004   hip,seq,t_ms,q(4)   pelvis quaternion
   - POST /api/ingest, from relay.py, when this runs remotely (e.g. Render) and
     a relay on the LAN forwards readings over HTTPS instead.

@@ -1,17 +1,18 @@
 /*
- * knee_wifi.ino
- * PASS knee module - XIAO ESP32 (C3/S3) + 2x BNO085 -> WiFi UDP stream.
+ * knee_right.ino
+ * PASS RIGHT knee module - XIAO ESP32-S3 + 2x BNO085 -> WiFi UDP stream.
+ * Identical to knee_left.ino except UNIT_ID - flash this onto the board
+ * mounted on the RIGHT leg.
  *
  * Same as knee_imu_serial.ino (hardened dual-BNO085 init + liveness watchdog +
  * health line), but instead of raising its own SoftAP it JOINS the travel router
- * (30.007) like the feet and unicasts each sample to the laptop over UDP. Serial
- * output is kept as a wired fallback, so one firmware works both plugged in and
- * on battery.
+ * and broadcasts each sample to the laptop over UDP. Serial output is kept as
+ * a wired fallback, so one firmware works both plugged in and on battery.
  *
- * Emits EXACTLY the contract Python's sources/serial_source.py + network_source.py
- * parse (no unit_id prefix - the knee has its own port):
+ * Emits (unit_id-prefixed, both knees share one port - the prefix is how the
+ * receiver tells them apart, same pattern as feet on their shared port):
  *
- *     seq,t_ms,knee_angle_deg,qtw,qtx,qty,qtz,qsw,qsx,qsy,qsz\n
+ *     unit_id,seq,t_ms,knee_angle_deg,qtw,qtx,qty,qtz,qsw,qsx,qsy,qsz\n
  *
  * TRUTH LIVES IN PYTHON: the two raw quaternions are the source of truth; the
  * engine recomputes the knee angle via swing-twist. knee_angle_deg here is a
@@ -26,6 +27,9 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include "SparkFun_BNO080_Arduino_Library.h"
+
+// ---- identity ---------------------------------------------------------
+#define UNIT_ID "knee_right"
 
 // ---- network (travel router, same as the feet) -----------------------------
 #define WIFI_SSID "TP-Link_1285"
@@ -143,20 +147,19 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, !LED_ON);   // off until we know the WiFi state
 
-  Serial.println("# PASS knee IMU bring-up (wireless)");
+  Serial.println("# PASS " UNIT_ID " IMU bring-up (wireless)");
 
   // Block-and-wait for the join here (like the feet firmware that works), giving
   // the association uninterrupted time. Sensors init AFTER, so nothing is starved.
   wifiBegin();
   uint32_t wt0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - wt0 < 20000) delay(250);
-  Serial.print("# knee wifi ");
+  Serial.print("# " UNIT_ID " wifi ");
   Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED (auto-retrying) ");
   Serial.print(WiFi.localIP());
   Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
   WiFi.setSleep(false);      // keep radio awake -> smooth stream, no "stale" gaps
-  WiFi.setTxPower(WIFI_POWER_19_5dBm);   // force max TX power (diagnostic: rule out a low default)
-  Serial.print("# knee tx power set, actual="); Serial.println((int)WiFi.getTxPower());
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);   // force max TX power
   udp.begin(UDP_PORT);
 
   delay(BOOT_DELAY_MS);      // BNO085 power-on boot before the first begin()
@@ -169,7 +172,7 @@ void setup() {
   shankLastReport = now;
   lastHealth = now;
 
-  Serial.println("# streaming: seq,t_ms,knee_angle_deg,qtw,qtx,qty,qtz,qsw,qsx,qsy,qsz");
+  Serial.println("# streaming: " UNIT_ID ",seq,t_ms,knee_angle_deg,qtw,qtx,qty,qtz,qsw,qsx,qsy,qsz");
 }
 
 void loop() {
@@ -186,7 +189,7 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     if (!wifiWasUp) {
       wifiWasUp = true;
-      Serial.print("# knee wifi JOINED ");
+      Serial.print("# " UNIT_ID " wifi JOINED ");
       Serial.print(WiFi.localIP());
       Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
     }
@@ -208,9 +211,9 @@ void loop() {
     shankCount++;
   }
 
-  // DIAGNOSTIC: yield once per loop so tight back-to-back I2C polling of two
-  // sensors can't monopolize CPU time right when the WiFi stack needs a window
-  // to actually transmit. Testing whether this is what's blocking delivery.
+  // Yield once per loop so tight back-to-back I2C polling of two sensors can't
+  // monopolize CPU time right when the WiFi stack needs a window to transmit
+  // (this is what was causing near-total packet loss before this fix).
   delay(1);
 
   // Liveness watchdog: re-issue the report if a found sensor goes silent (the
@@ -247,14 +250,14 @@ void loop() {
   }
 
   // Emit at a steady cadence: build the line once, send it BOTH ways (serial
-  // wired fallback + UDP to the laptop). Same contract for SerialSource and
-  // NetworkSource.
+  // wired fallback + UDP to the laptop). unit_id prefix lets the receiver tell
+  // this apart from the other knee sharing the same port.
   if (now - lastEmit >= EMIT_MS) {
     lastEmit = now;
 
-    char line[160];
+    char line[180];
     snprintf(line, sizeof(line),
-             "%lu,%lu,%.2f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
+             UNIT_ID ",%lu,%lu,%.2f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
              (unsigned long)seq, (unsigned long)now, roughKneeAngleDeg(),
              tw, tx, ty, tz, sw, sx, sy, sz);
 
