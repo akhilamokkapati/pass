@@ -120,6 +120,7 @@ body {
 /* ---- clinician ---- */
 .clinician { display: grid; gap: 16px; }
 .clinician-head { display: flex; align-items: center; justify-content: space-between; }
+.clinician-head-actions { display: flex; align-items: center; gap: 8px; }
 .clinician-title { color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
 .legend-inline { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }

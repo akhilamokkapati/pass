@@ -2,6 +2,7 @@ import TimeChart from './TimeChart.jsx'
 import FeetMap from './FeetMap.jsx'
 import { StatusPill } from './ui.jsx'
 import { downloadReport } from './report.js'
+import { downloadCSV } from './csv.js'
 
 function Stat({ label, value, unit }) {
   return (
@@ -44,9 +45,14 @@ export default function ClinicianView({ m, snap }) {
     <div className="clinician">
       <div className="clinician-head">
         <span className="clinician-title">Session detail</span>
-        <button className="btn download" onClick={() => downloadReport(m)}>
-          <span className="dl-ico" /> Download report
-        </button>
+        <div className="clinician-head-actions">
+          <button className="btn download" onClick={() => downloadReport(m)}>
+            <span className="dl-ico" /> Download report
+          </button>
+          <button className="btn ghost" onClick={() => downloadCSV(m)}>
+            Download CSV
+          </button>
+        </div>
       </div>
 
       <section className="card accent-knee">

@@ -5,6 +5,8 @@ const STALE = 1.5
 export const fresh = (age) => age != null && age < STALE
 const CAL_BUF_MAX = 12       // ~0.5-0.6s of samples at 20Hz to average per capture
 const MIN_BEND_DEG = 15      // reject a calibration bend this small or smaller
+const SESSION_MAX = 108000   // ~90min at 20Hz - keep the full session for CSV export,
+                              // not just the ~45s the live charts need
 
 // Derives display metrics from the raw socket snapshot: foot loads (baseline
 // removed), left/right balance, hip tilt-from-neutral, knee rep counting, and a
@@ -86,7 +88,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     }
 
     s.hist.push({ t: snap.t, kneeL: kneeLAngle, kneeR: kneeRAngle, hip: hipTilt, loadL, loadR })
-    if (s.hist.length > 900) s.hist.shift()
+    if (s.hist.length > SESSION_MAX) s.hist.shift()
 
     setM({
       kneeLAngle, kneeLOk, kneeRAngle, kneeROk, hipTilt, hipOk,
