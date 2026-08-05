@@ -28,17 +28,30 @@
 #include "SparkFun_BNO080_Arduino_Library.h"
 
 // ---- network (travel router, same as the feet) -----------------------------
-#define WIFI_SSID "30.007"
-#define WIFI_PASS "awesomesauce144"
-#define LAPTOP_IP "192.168.0.100"   // laptop IPv4 on the router (ipconfig)
+#define WIFI_SSID "TP-Link_1285"
+#define WIFI_PASS "15289346"
+// Broadcast, not unicast: this router's repeater/bridge mode silently drops
+// direct client-to-client unicast (AP/client isolation) even with excellent
+// RSSI and a confirmed join. Feet and hip already use broadcast and work.
+#define LAPTOP_IP "192.168.0.255"
 #define UDP_PORT  5005              // knee port (feet use 5006) -> NetworkSource default
+
+// ---- status LED --------------------------------------------------------
+// Onboard orange user LED on GPIO21 (active LOW: LOW = lit). Solid = joined WiFi,
+// blink = searching, off = not powered. No external wiring needed.
+#define LED_PIN 21
+#define LED_ON  LOW
 
 // ---- configuration ---------------------------------------------------------
 static const uint8_t  THIGH_ADDR = 0x4A;   // ADO -> GND
 static const uint8_t  SHANK_ADDR = 0x4B;   // ADO -> 3V3
 static const uint32_t I2C_HZ     = 100000; // BNO085 clock-stretching: keep at 100 kHz
 static const uint16_t REPORT_MS  = 10;     // game rotation vector interval (~100 Hz)
-static const uint32_t EMIT_MS    = 10;     // emit cadence (~100 Hz)
+static const uint32_t EMIT_MS    = 50;     // emit cadence (~20 Hz). Was 100 Hz; dropped to 20 Hz
+                                            // plus the loop() yield below fixed real packet loss
+                                            // (RSSI/status always looked fine, but almost nothing
+                                            // actually arrived - two I2C sensors + WiFi were
+                                            // starving each other). 20 Hz is plenty for knee angle.
 
 // Init timing to work around the BNO085 post-reset boot window.
 static const uint32_t BOOT_DELAY_MS   = 200;
@@ -77,6 +90,7 @@ bool     thighOk = false, shankOk = false;
 uint32_t thighLastReport = 0, shankLastReport = 0;
 uint32_t thighCount = 0, shankCount = 0;
 uint32_t lastHealth = 0;
+uint32_t udpBeginOk = 0, udpBeginFail = 0, udpEndOk = 0, udpEndFail = 0;
 
 // Rough on-device knee angle: total relative rotation = 2*acos(|dot(qt,qs)|).
 // Cross-check only; the Python engine does swing-twist.
@@ -126,6 +140,9 @@ void setup() {
   Wire.begin(D4, D5);        // XIAO: SDA=D4, SCL=D5
   Wire.setClock(I2C_HZ);     // 100 kHz - required for BNO085 clock stretching
 
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, !LED_ON);   // off until we know the WiFi state
+
   Serial.println("# PASS knee IMU bring-up (wireless)");
 
   // Block-and-wait for the join here (like the feet firmware that works), giving
@@ -137,6 +154,9 @@ void setup() {
   Serial.print(WiFi.status() == WL_CONNECTED ? "JOINED " : "FAILED (auto-retrying) ");
   Serial.print(WiFi.localIP());
   Serial.print(" -> "); Serial.print(dest); Serial.print(":"); Serial.println(UDP_PORT);
+  WiFi.setSleep(false);      // keep radio awake -> smooth stream, no "stale" gaps
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);   // force max TX power (diagnostic: rule out a low default)
+  Serial.print("# knee tx power set, actual="); Serial.println((int)WiFi.getTxPower());
   udp.begin(UDP_PORT);
 
   delay(BOOT_DELAY_MS);      // BNO085 power-on boot before the first begin()
@@ -154,6 +174,10 @@ void setup() {
 
 void loop() {
   uint32_t now = millis();
+
+  // status LED: solid = joined, blinking = searching
+  if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LED_ON);
+  else digitalWrite(LED_PIN, ((now / 300) % 2) ? LED_ON : !LED_ON);
 
   // WiFi maintenance: just announce when the link comes up. We never call
   // begin() again here - setAutoReconnect(true) retries the association in the
@@ -184,6 +208,11 @@ void loop() {
     shankCount++;
   }
 
+  // DIAGNOSTIC: yield once per loop so tight back-to-back I2C polling of two
+  // sensors can't monopolize CPU time right when the WiFi stack needs a window
+  // to actually transmit. Testing whether this is what's blocking delivery.
+  delay(1);
+
   // Liveness watchdog: re-issue the report if a found sensor goes silent (the
   // dropped-feature-command / frozen-identity failure mode).
   if (thighOk && (now - thighLastReport) > SILENT_TIMEOUT_MS) {
@@ -202,7 +231,19 @@ void loop() {
     Serial.print("# health thigh_reports=");
     Serial.print(thighCount);
     Serial.print(" shank_reports=");
-    Serial.println(shankCount);
+    Serial.print(shankCount);
+    Serial.print("  wifi ");
+    Serial.print(WiFi.status() == WL_CONNECTED ? "UP" : "DOWN");
+    Serial.print("  rssi ");
+    Serial.print(WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0);
+    Serial.print(" dBm  udp begin ok=");
+    Serial.print(udpBeginOk);
+    Serial.print(" fail=");
+    Serial.print(udpBeginFail);
+    Serial.print("  end ok=");
+    Serial.print(udpEndOk);
+    Serial.print(" fail=");
+    Serial.println(udpEndFail);
   }
 
   // Emit at a steady cadence: build the line once, send it BOTH ways (serial
@@ -219,10 +260,12 @@ void loop() {
 
     Serial.println(line);                       // wired fallback
 
-    udp.beginPacket(dest, UDP_PORT);            // wireless to the laptop
+    int beginOk = udp.beginPacket(dest, UDP_PORT);   // wireless to the laptop
+    if (beginOk) { udpBeginOk++; } else { udpBeginFail++; }
     udp.write((const uint8_t*)line, strlen(line));
     udp.write((uint8_t)'\n');
-    udp.endPacket();
+    int endOk = udp.endPacket();
+    if (endOk) { udpEndOk++; } else { udpEndFail++; }
 
     seq++;
   }
