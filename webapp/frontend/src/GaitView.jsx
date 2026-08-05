@@ -37,6 +37,8 @@ export default function GaitView({ m }) {
               kneeLDeg={kneeLOk ? m.kneeLAngle : 0}
               kneeRDeg={kneeROk ? m.kneeRAngle : 0}
               hipTiltDeg={m?.hipOk ? m.hipTilt : 0}
+              footPhaseL={m?.footPhaseL}
+              footPhaseR={m?.footPhaseR}
             />
           </Suspense>
           <Grid args={[10, 10]} position={[0, 0, 0]} cellColor="#29313d" sectionColor="#3a4552" fadeDistance={12} />

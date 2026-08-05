@@ -15,6 +15,8 @@ const BONE = {
   hips: 'mixamorigHips',
   leftKnee: 'mixamorigLeftLeg',
   rightKnee: 'mixamorigRightLeg',
+  leftFoot: 'mixamorigLeftFoot',
+  rightFoot: 'mixamorigRightFoot',
 }
 
 // Local axis each bone bends about, in ITS OWN rest-pose local space. Found by
@@ -23,7 +25,16 @@ const BONE = {
 const KNEE_AXIS = new THREE.Vector3(1, 0, 0)
 const KNEE_SIGN = 1
 
-export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg }) {
+// There's no ankle IMU, so the foot has no measured angle - only a contact
+// PHASE from the feet FSRs (useMetrics: footPhaseL/R, derived from the
+// heel-specific channels). This is a bounded visual cue for foot clearance
+// during swing, not a calibrated kinematic reading; it eases toward a target
+// pitch each frame rather than snapping, so it reads as motion, not a glitch.
+const FOOT_AXIS = new THREE.Vector3(1, 0, 0)
+const SWING_TOE_UP_DEG = 18
+const FOOT_EASE_PER_SEC = 10
+
+export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg, footPhaseL, footPhaseR }) {
   const { scene } = useGLTF(modelPath)
   // Clone the skinned scene so this component can mount more than once (React
   // strict-mode double-invoke, future multi-view) without fighting over one
@@ -32,6 +43,7 @@ export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg }
 
   const bones = useRef({})
   const restQuat = useRef({})
+  const footAngle = useRef({ left: 0, right: 0 })
 
   useEffect(() => {
     bones.current = {}
@@ -46,7 +58,7 @@ export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg }
     }
   }, [clone])
 
-  useFrame(() => {
+  useFrame((_state, delta) => {
     const b = bones.current
     const rest = restQuat.current
     if (b.leftKnee && rest.leftKnee) {
@@ -63,6 +75,21 @@ export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg }
       const tilt = THREE.MathUtils.degToRad(Math.min(30, hipTiltDeg))
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt)
       b.hips.quaternion.copy(rest.hips).multiply(q)
+    }
+
+    // Foot clearance cue: ease toward a toes-up pitch during swing, flat
+    // during stance (or when phase is unknown - no feet connected yet).
+    const ease = 1 - Math.exp(-FOOT_EASE_PER_SEC * delta)
+    const targetDeg = (phase) => (phase === 'swing' ? SWING_TOE_UP_DEG : 0)
+    footAngle.current.left += (targetDeg(footPhaseL) - footAngle.current.left) * ease
+    footAngle.current.right += (targetDeg(footPhaseR) - footAngle.current.right) * ease
+    if (b.leftFoot && rest.leftFoot) {
+      const q = new THREE.Quaternion().setFromAxisAngle(FOOT_AXIS, THREE.MathUtils.degToRad(footAngle.current.left))
+      b.leftFoot.quaternion.copy(rest.leftFoot).multiply(q)
+    }
+    if (b.rightFoot && rest.rightFoot) {
+      const q = new THREE.Quaternion().setFromAxisAngle(FOOT_AXIS, THREE.MathUtils.degToRad(footAngle.current.right))
+      b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
     }
   })
 

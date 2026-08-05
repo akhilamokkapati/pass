@@ -8,6 +8,14 @@ const MIN_BEND_DEG = 15      // reject a calibration bend this small or smaller
 const SESSION_MAX = 108000   // ~90min at 20Hz - keep the full session for CSV export,
                               // not just the ~45s the live charts need
 
+// Heel-strike/toe-off from the feet FSRs: no ankle IMU exists, so this reads
+// contact PHASE (foot down vs foot lifted) from the heel-specific channels
+// identified in feet/foot_layout.py's press-tested anatomy map, not a
+// measured angle. Hysteresis (stance needs more load than swing needs to
+// release) avoids chatter right at the threshold.
+const HEEL_STANCE_ON = 150   // heel load above this -> stance (foot down)
+const HEEL_STANCE_OFF = 50   // heel load below this -> swing (foot lifted)
+
 // Derives display metrics from the raw socket snapshot: foot loads (baseline
 // removed), left/right balance, hip tilt-from-neutral, knee rep counting, and a
 // rolling history buffer for the clinician time charts. Keeps per-channel foot
@@ -25,8 +33,16 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // the other.
     bufL: [], bufR: [], calL: null, calR: null,
     calPhase: 'idle', calCaptureL: null, calCaptureR: null, calMsg: '',
+    footLayout: null, heelBaseL: {}, heelBaseR: {},
+    footPhaseL: 'stance', footPhaseR: 'stance',
   })
   const [m, setM] = useState(null)
+
+  // Fetch the same channel-anatomy map FeetMap.jsx uses, so "which channels
+  // are the heel" has one source of truth instead of a second hardcoded copy.
+  useEffect(() => {
+    fetch('/api/layout').then((r) => r.json()).then((layout) => { S.current.footLayout = layout }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!snap) return
@@ -49,6 +65,31 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     }
     const loadL = lOk ? load(feet.left.c, s.baseL) : 0
     const loadR = rOk ? load(feet.right.c, s.baseR) : 0
+
+    // Heel-specific load (subset of channels, not the whole-foot total) drives
+    // stance/swing phase for the gait avatar's feet.
+    const heelLoad = (side, arr, base) => {
+      const zones = s.footLayout?.[side]
+      if (!arr || !zones) return null
+      let sum = 0
+      for (const [ch, z] of Object.entries(zones)) {
+        if (z.anatomy !== 'heel') continue
+        const v = arr[Number(ch)] ?? 0
+        base[ch] = base[ch] == null ? v : Math.min(base[ch], v)
+        sum += Math.max(0, v - base[ch])
+      }
+      return sum
+    }
+    const heelL = lOk ? heelLoad('left', feet.left.c, s.heelBaseL) : null
+    const heelR = rOk ? heelLoad('right', feet.right.c, s.heelBaseR) : null
+    if (heelL != null) {
+      if (s.footPhaseL === 'swing' && heelL > HEEL_STANCE_ON) s.footPhaseL = 'stance'
+      else if (s.footPhaseL === 'stance' && heelL < HEEL_STANCE_OFF) s.footPhaseL = 'swing'
+    }
+    if (heelR != null) {
+      if (s.footPhaseR === 'swing' && heelR > HEEL_STANCE_ON) s.footPhaseR = 'stance'
+      else if (s.footPhaseR === 'stance' && heelR < HEEL_STANCE_OFF) s.footPhaseR = 'swing'
+    }
 
     if (s.hipRef == null && hipOk) s.hipRef = hip.q
     const hipTilt = hipOk && s.hipRef ? tiltDeg(s.hipRef, hip.q) : null
@@ -93,6 +134,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     setM({
       kneeLAngle, kneeLOk, kneeRAngle, kneeROk, hipTilt, hipOk,
       loadL, loadR, lOk, rOk,
+      footPhaseL: lOk ? s.footPhaseL : null, footPhaseR: rOk ? s.footPhaseR : null,
       repsL: s.repsL, repsR: s.repsR, hist: s.hist,
       anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
       calibratedL: !!s.calL, calibratedR: !!s.calR,
