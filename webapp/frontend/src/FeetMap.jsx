@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { StatusPill } from './ui.jsx'
 
 const STALE = 1.5
-const FULL_SCALE = 1600 // inverted-ADC value that reads as "full" pressure
+const DEFAULT_FULL_SCALE = 3400 // inverted-ADC value that reads as "full" pressure
+const SENS_KEY = 'pass_feet_full_scale'
 
 // A foot silhouette (toes at top, heel at bottom), viewBox 0 0 150 210.
 const FOOT_PATH =
@@ -24,12 +25,13 @@ function pressureColor(t) {
   return `rgb(${r},${g},${b})`
 }
 
-function Foot({ side, zones, data }) {
+function Foot({ side, zones, data, fullScale }) {
   const ok = data && data.age != null && data.age < STALE
   const c = data?.c || []
   const baseRef = useRef({})
   const W = 150, H = 210
   const mirror = side === 'right' ? `translate(${W},0) scale(-1,1)` : undefined
+  let total = 0
   return (
     <div className="foot">
       <div className="foot-label">{side} <StatusPill ok={ok} /></div>
@@ -40,34 +42,44 @@ function Foot({ side, zones, data }) {
           const base = baseRef.current
           base[ch] = base[ch] == null ? raw : Math.min(base[ch], raw)
           const val = Math.max(0, raw - base[ch])
+          total += val
           const cx = z.x * W
           const cy = (1 - z.y) * H
           const anat = !!z.anatomy
           return (
             <circle key={ch} cx={cx} cy={cy} r={anat ? 14 : 12}
-              fill={pressureColor(val / FULL_SCALE)} className="zone"
+              fill={pressureColor(val / fullScale)} className="zone"
               stroke={anat ? '#ffffff55' : '#00000055'} />
           )
         }) : (
           <text x={W / 2} y={H / 2} textAnchor="middle" className="foot-off">not connected</text>
         )}
       </svg>
+      <div className="foot-load">{ok ? `load ${Math.round(total)}` : '—'}</div>
     </div>
   )
 }
 
 export default function FeetMap({ feet }) {
   const [layout, setLayout] = useState(null)
+  const [fullScale, setFullScale] = useState(() => {
+    const saved = Number(localStorage.getItem(SENS_KEY))
+    return saved > 0 ? saved : DEFAULT_FULL_SCALE
+  })
   useEffect(() => {
     fetch('/api/layout').then((r) => r.json()).then(setLayout).catch(() => {})
   }, [])
+  const setScale = (v) => {
+    setFullScale(v)
+    localStorage.setItem(SENS_KEY, String(v))
+  }
 
   return (
     <div className="feet-card">
       {layout ? (
         <div className="feet-row">
-          <Foot side="left" zones={layout.left} data={feet?.left} />
-          <Foot side="right" zones={layout.right} data={feet?.right} />
+          <Foot side="left" zones={layout.left} data={feet?.left} fullScale={fullScale} />
+          <Foot side="right" zones={layout.right} data={feet?.right} fullScale={fullScale} />
         </div>
       ) : (
         <div className="sub">loading layout...</div>
@@ -76,6 +88,12 @@ export default function FeetMap({ feet }) {
         <span className="legend-label">low</span>
         <span className="legend-bar" />
         <span className="legend-label">high pressure</span>
+      </div>
+      <div className="sens-row">
+        <span className="legend-label">color sensitivity</span>
+        <input type="range" min="800" max="4000" step="100" value={fullScale}
+          onChange={(e) => setScale(Number(e.target.value))} />
+        <span className="sens-val">{fullScale}</span>
       </div>
     </div>
   )

@@ -144,6 +144,10 @@ body {
 .legend { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
 .legend-label { color: var(--muted); font-size: 12px; }
 .legend-bar { width: 160px; height: 8px; border-radius: 999px; background: linear-gradient(90deg, #252a33, #f5c200, #ff3b30); }
+.foot-load { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.sens-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
+.sens-row input[type="range"] { width: 140px; accent-color: var(--accent); }
+.sens-val { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 34px; }
 
 /* ---- buttons / footer ---- */
 .actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
