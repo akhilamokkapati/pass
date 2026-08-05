@@ -7,7 +7,7 @@ function Head({ title, ok }) {
 
 function BalanceBar({ m }) {
   const total = (m?.loadL || 0) + (m?.loadR || 0)
-  const active = total > 60 && (m?.lOk || m?.rOk)
+  const active = total > 400 && (m?.lOk || m?.rOk)
   const leftPct = active ? (m.loadL / total) * 100 : 50
   let cue = 'Step onto the insoles'
   if (active) {
