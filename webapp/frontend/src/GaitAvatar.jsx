@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useGLTF } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
-// Bone names from the Mixamo rig baked into Xbot.glb - Hips -> UpLeg -> Leg
-// (the knee hinge) -> Foot per side. GLTFLoader strips the `mixamorig:` colon
-// down to a plain prefix (`mixamorig:LeftLeg` becomes `mixamorigLeftLeg`),
-// confirmed by logging the loaded skeleton's actual bone names. Knee flexion
-// rotates the Leg bone RELATIVE TO ITS OWN REST-POSE ORIENTATION (captured
-// once on load), not to some assumed world axis - keeps this correct
-// regardless of the bind pose.
+// Bone names from the Mixamo rig baked into these characters - Hips -> UpLeg
+// -> Leg (the knee hinge) -> Foot per side. GLTFLoader strips the
+// `mixamorig:` colon down to a plain prefix (`mixamorig:LeftLeg` becomes
+// `mixamorigLeftLeg`); FBXLoader keeps the colon as-is. Both forms are
+// checked so the same lookup works for either loader, confirmed by logging
+// each loaded skeleton's actual bone names rather than assuming.
 const BONE = {
-  hips: 'mixamorigHips',
-  leftKnee: 'mixamorigLeftLeg',
-  rightKnee: 'mixamorigRightLeg',
-  leftFoot: 'mixamorigLeftFoot',
-  rightFoot: 'mixamorigRightFoot',
+  hips: ['mixamorigHips', 'mixamorig:Hips'],
+  leftKnee: ['mixamorigLeftLeg', 'mixamorig:LeftLeg'],
+  rightKnee: ['mixamorigRightLeg', 'mixamorig:RightLeg'],
+  leftFoot: ['mixamorigLeftFoot', 'mixamorig:LeftFoot'],
+  rightFoot: ['mixamorigRightFoot', 'mixamorig:RightFoot'],
 }
 
 // Local axis each bone bends about, in ITS OWN rest-pose local space. Found by
@@ -34,29 +34,26 @@ const FOOT_AXIS = new THREE.Vector3(1, 0, 0)
 const SWING_TOE_UP_DEG = 18
 const FOOT_EASE_PER_SEC = 10
 
-export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg, footPhaseL, footPhaseR }) {
-  const { scene } = useGLTF(modelPath)
-  // Clone the skinned scene so this component can mount more than once (React
-  // strict-mode double-invoke, future multi-view) without fighting over one
-  // shared skeleton - the standard pattern for reusing a skinned glTF.
-  const clone = useMemo(() => cloneSkeleton(scene), [scene])
-
+// Shared rig-driving logic for any loaded skeleton, regardless of which
+// loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
+// bone graph, so this doesn't need to know which one loaded `root`).
+function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, footPhaseL, footPhaseR }) {
   const bones = useRef({})
   const restQuat = useRef({})
   const footAngle = useRef({ left: 0, right: 0 })
 
   useEffect(() => {
     bones.current = {}
-    clone.traverse((obj) => {
+    root.traverse((obj) => {
       if (!obj.isBone) return
-      for (const [key, name] of Object.entries(BONE)) {
-        if (obj.name === name) bones.current[key] = obj
+      for (const [key, names] of Object.entries(BONE)) {
+        if (names.includes(obj.name)) bones.current[key] = obj
       }
     })
     for (const [key, bone] of Object.entries(bones.current)) {
       restQuat.current[key] = bone.quaternion.clone()
     }
-  }, [clone])
+  }, [root])
 
   useFrame((_state, delta) => {
     const b = bones.current
@@ -77,8 +74,6 @@ export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg, 
       b.hips.quaternion.copy(rest.hips).multiply(q)
     }
 
-    // Foot clearance cue: ease toward a toes-up pitch during swing, flat
-    // during stance (or when phase is unknown - no feet connected yet).
     const ease = 1 - Math.exp(-FOOT_EASE_PER_SEC * delta)
     const targetDeg = (phase) => (phase === 'swing' ? SWING_TOE_UP_DEG : 0)
     footAngle.current.left += (targetDeg(footPhaseL) - footAngle.current.left) * ease
@@ -92,11 +87,30 @@ export default function GaitAvatar({ modelPath, kneeLDeg, kneeRDeg, hipTiltDeg, 
       b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
     }
   })
-
-  return <primitive object={clone} />
 }
 
-// Only the default skin is preloaded eagerly; the others (also a few MB each)
-// load on demand when picked, via the same Suspense boundary GaitView already
-// wraps this in.
+function GltfBody({ modelPath, scale, ...rig }) {
+  const { scene } = useGLTF(modelPath)
+  const clone = useMemo(() => cloneSkeleton(scene), [scene])
+  useAvatarRig(clone, rig)
+  return <primitive object={clone} scale={scale ?? 1} />
+}
+
+function FbxBody({ modelPath, scale, ...rig }) {
+  const fbx = useLoader(FBXLoader, modelPath)
+  const clone = useMemo(() => cloneSkeleton(fbx), [fbx])
+  useAvatarRig(clone, rig)
+  return <primitive object={clone} scale={scale ?? 1} />
+}
+
+export default function GaitAvatar({ modelPath, scale, ...rig }) {
+  const isFbx = modelPath.toLowerCase().endsWith('.fbx')
+  return isFbx
+    ? <FbxBody modelPath={modelPath} scale={scale} {...rig} />
+    : <GltfBody modelPath={modelPath} scale={scale} {...rig} />
+}
+
+// Only the default skin is preloaded eagerly; the others (several MB each,
+// the FBX ones tens of MB) load on demand when picked, via the same
+// Suspense boundary GaitView already wraps this in.
 useGLTF.preload('/Xbot.glb')

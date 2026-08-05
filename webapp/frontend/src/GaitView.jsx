@@ -12,7 +12,7 @@ export default function GaitView({ m }) {
   const kneeROk = !!m?.kneeROk
   const [modelId, setModelId] = useState(() => localStorage.getItem('pass_gait_model') || DEFAULT_GAIT_MODEL)
   const pickModel = (id) => { setModelId(id); localStorage.setItem('pass_gait_model', id) }
-  const modelPath = (GAIT_MODELS.find((m) => m.id === modelId) || GAIT_MODELS[0]).path
+  const model = GAIT_MODELS.find((mo) => mo.id === modelId) || GAIT_MODELS[0]
 
   return (
     <div>
@@ -33,7 +33,8 @@ export default function GaitView({ m }) {
           <Suspense fallback={null}>
             <GaitAvatar
               key={modelId}
-              modelPath={modelPath}
+              modelPath={model.path}
+              scale={model.scale}
               kneeLDeg={kneeLOk ? m.kneeLAngle : 0}
               kneeRDeg={kneeROk ? m.kneeRAngle : 0}
               hipTiltDeg={m?.hipOk ? m.hipTilt : 0}
