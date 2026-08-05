@@ -9,7 +9,7 @@ const KNEE_TARGET = 60
 
 export default function App() {
   const { snap, connected } = useSocket()
-  const { m, zeroHip, resetReps, calibrateKnee } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
+  const { m, zeroHip, resetReps, calibrateKnees } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
   const [mode, setMode] = useState(() => localStorage.getItem('pass_mode') || 'patient')
   const pick = (x) => { setMode(x); localStorage.setItem('pass_mode', x) }
   const anyLive = !!m?.anyLive
@@ -44,13 +44,17 @@ export default function App() {
       )}
 
       {mode === 'patient'
-        ? <PatientView m={m} kneeTarget={KNEE_TARGET} onCalibrate={calibrateKnee} />
+        ? <PatientView m={m} kneeTarget={KNEE_TARGET} />
         : <ClinicianView m={m} snap={snap} />}
 
       <div className="actions">
         <button className="btn ghost" onClick={zeroHip}>Zero hip (stand tall)</button>
         <button className="btn ghost" onClick={resetReps}>Reset reps</button>
+        <button className={`btn ghost ${m?.calPhase === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKnees}>
+          {m?.calPhase === 'awaiting-bent' ? 'Capture bent' : 'Calibrate knees'}
+        </button>
       </div>
+      {m?.calMsg && <div className="cal-msg center-msg">{m.calMsg}</div>}
 
       <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
     </div>

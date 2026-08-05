@@ -17,9 +17,12 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // knee flexion calibration: rolling raw-quaternion buffers feed capture
     // clicks; calL/calR (once set) hold {qNeutral, axis} and switch the angle
     // computation from the firmware's rough cross-check to real swing-twist.
+    // One shared phase/button drives both sides at once (typical use: both
+    // knees worn together), but each side's neutral/axis is captured and
+    // judged independently, since a sleeve on one leg tells you nothing about
+    // the other.
     bufL: [], bufR: [], calL: null, calR: null,
-    calPhaseL: 'idle', calPhaseR: 'idle', calCaptureL: null, calCaptureR: null,
-    calMsgL: '', calMsgR: '',
+    calPhase: 'idle', calCaptureL: null, calCaptureR: null, calMsg: '',
   })
   const [m, setM] = useState(null)
 
@@ -91,55 +94,68 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       repsL: s.repsL, repsR: s.repsR, hist: s.hist,
       anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
       calibratedL: !!s.calL, calibratedR: !!s.calR,
-      calPhaseL: s.calPhaseL, calPhaseR: s.calPhaseR,
-      calMsgL: s.calMsgL, calMsgR: s.calMsgR,
+      calPhase: s.calPhase, calMsg: s.calMsg,
     })
   }, [snap?.t, kneeTarget])
 
   const zeroHip = () => { S.current.hipRef = null }
   const resetReps = () => { S.current.repsL = 0; S.current.repsR = 0 }
 
-  // Two-click calibration per knee, mirroring axis_calibration.py: first
-  // click captures a short averaged window of the current (assumed straight)
-  // pose as neutral; second click captures a bent pose and derives the real
-  // flexion axis from the rotation between them. Reading buffers straight
-  // from the rolling window means each click is instant, no recording delay.
-  const calibrateKnee = (side) => {
+  // One button drives both knees through the same two-click flow, mirroring
+  // axis_calibration.py: first click captures a short averaged window of the
+  // current (assumed straight) pose as neutral for every side that's live,
+  // second click captures a bent pose and derives each side's real flexion
+  // axis from the rotation between them. Each side is judged independently -
+  // one knee's bad capture doesn't discard the other's good one.
+  const calibrateKnees = () => {
     const s = S.current
-    const buf = side === 'left' ? s.bufL : s.bufR
-    const phaseKey = side === 'left' ? 'calPhaseL' : 'calPhaseR'
-    const captureKey = side === 'left' ? 'calCaptureL' : 'calCaptureR'
-    const calKey = side === 'left' ? 'calL' : 'calR'
-    const msgKey = side === 'left' ? 'calMsgL' : 'calMsgR'
+    const sides = [
+      { key: 'left', buf: s.bufL, captureKey: 'calCaptureL', calKey: 'calL' },
+      { key: 'right', buf: s.bufR, captureKey: 'calCaptureR', calKey: 'calR' },
+    ].filter((side) => side.buf.length >= 3)
 
-    if (buf.length < 3) {
-      s[msgKey] = 'Waiting for sensor data - try again in a moment'
-      return
-    }
-    const capture = { qt: qaverage(buf.map((b) => b.qt)), qs: qaverage(buf.map((b) => b.qs)) }
-
-    if (s[phaseKey] === 'idle') {
-      s[captureKey] = capture
-      s[phaseKey] = 'awaiting-bent'
-      s[msgKey] = 'Now bend the knee ~30-60° and hold still, then click again'
+    if (!sides.length) {
+      s.calMsg = 'Waiting for sensor data - try again in a moment'
       return
     }
 
-    const straight = s[captureKey]
-    const qNeutral = qrelative(straight.qt, straight.qs)
-    const qBentRel = qrelative(capture.qt, capture.qs)
-    const qOffset = qrelative(qNeutral, qBentRel)
-    const { axis, angleDeg } = axisAngle(qcanon(qOffset))
-
-    s[phaseKey] = 'idle'
-    s[captureKey] = null
-    if (angleDeg < MIN_BEND_DEG) {
-      s[msgKey] = 'Bend too small - hold each pose still and try again'
+    if (s.calPhase === 'idle') {
+      for (const side of sides) {
+        s[side.captureKey] = {
+          qt: qaverage(side.buf.map((b) => b.qt)),
+          qs: qaverage(side.buf.map((b) => b.qs)),
+        }
+      }
+      s.calPhase = 'awaiting-bent'
+      s.calMsg = 'Now bend the knee(s) ~30-60° and hold still, then click again'
       return
     }
-    s[calKey] = { qNeutral, axis }
-    s[msgKey] = 'Calibrated'
+
+    const results = []
+    for (const side of sides) {
+      const straight = s[side.captureKey]
+      if (!straight) continue   // wasn't live for the straight capture
+      const capture = {
+        qt: qaverage(side.buf.map((b) => b.qt)),
+        qs: qaverage(side.buf.map((b) => b.qs)),
+      }
+      const qNeutral = qrelative(straight.qt, straight.qs)
+      const qBentRel = qrelative(capture.qt, capture.qs)
+      const qOffset = qrelative(qNeutral, qBentRel)
+      const { axis, angleDeg } = axisAngle(qcanon(qOffset))
+      if (angleDeg < MIN_BEND_DEG) {
+        results.push(`${side.key}: bend too small`)
+        continue
+      }
+      s[side.calKey] = { qNeutral, axis }
+      results.push(`${side.key}: calibrated`)
+    }
+
+    s.calPhase = 'idle'
+    s.calCaptureL = null
+    s.calCaptureR = null
+    s.calMsg = results.length ? results.join(', ') : 'Bend too small - hold each pose still and try again'
   }
 
-  return { m, zeroHip, resetReps, calibrateKnee }
+  return { m, zeroHip, resetReps, calibrateKnees }
 }

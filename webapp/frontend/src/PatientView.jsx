@@ -32,10 +32,8 @@ function BalanceBar({ m }) {
   )
 }
 
-function KneeCard({ title, ok, angle, reps, kneeTarget, calibrated, calPhase, calMsg, onCalibrate }) {
+function KneeCard({ title, ok, angle, reps, kneeTarget }) {
   const reached = ok && angle >= kneeTarget
-  const awaitingBent = calPhase === 'awaiting-bent'
-  const btnLabel = awaitingBent ? 'Capture bent' : (calibrated ? 'Recalibrate' : 'Calibrate')
   return (
     <div className={`card center accent-knee ${ok ? '' : 'off'}`}>
       <Head title={title} ok={ok} />
@@ -47,17 +45,13 @@ function KneeCard({ title, ok, angle, reps, kneeTarget, calibrated, calPhase, ca
           <div className={`cue ${reached ? 'good' : ''}`}>
             {reached ? 'Target reached' : 'Keep bending'}
           </div>
-          <button className={`btn ghost cal-btn ${awaitingBent ? 'on' : ''}`} onClick={onCalibrate}>
-            {btnLabel}
-          </button>
-          {calMsg && <div className="cal-msg">{calMsg}</div>}
         </>
       ) : <div className="cue">Waiting for sensor</div>}
     </div>
   )
 }
 
-export default function PatientView({ m, kneeTarget, onCalibrate }) {
+export default function PatientView({ m, kneeTarget }) {
   const hipOk = !!m?.hipOk
   const feetOk = !!(m?.lOk || m?.rOk)
   const hipLevel = hipOk && m.hipTilt < 10
@@ -65,13 +59,9 @@ export default function PatientView({ m, kneeTarget, onCalibrate }) {
   return (
     <div className="grid patient">
       <KneeCard title="Left knee bend" ok={!!m?.kneeLOk} angle={m?.kneeLAngle}
-        reps={m?.repsL} kneeTarget={kneeTarget}
-        calibrated={!!m?.calibratedL} calPhase={m?.calPhaseL} calMsg={m?.calMsgL}
-        onCalibrate={() => onCalibrate?.('left')} />
+        reps={m?.repsL} kneeTarget={kneeTarget} />
       <KneeCard title="Right knee bend" ok={!!m?.kneeROk} angle={m?.kneeRAngle}
-        reps={m?.repsR} kneeTarget={kneeTarget}
-        calibrated={!!m?.calibratedR} calPhase={m?.calPhaseR} calMsg={m?.calMsgR}
-        onCalibrate={() => onCalibrate?.('right')} />
+        reps={m?.repsR} kneeTarget={kneeTarget} />
 
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />
