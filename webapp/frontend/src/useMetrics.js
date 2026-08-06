@@ -37,7 +37,7 @@ const FORM_MIN_REP_S = 0.4
 // baselines and the hip zero in a ref so they persist across renders.
 export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   const S = useRef({
-    hist: [], baseL: {}, baseR: {}, hipRef: null,
+    hist: [], baseL: {}, baseR: {}, lWasOk: false, rWasOk: false, hipRef: null,
     repsL: 0, phaseL: 'down', repsR: 0, phaseR: 'down',
     // knee flexion calibration: rolling raw-quaternion buffers feed capture
     // clicks; calL/calR (once set) hold {qNeutral, axis} and switch the angle
@@ -88,6 +88,18 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     const lOk = fresh(feet?.left?.age)
     const rOk = fresh(feet?.right?.age)
     const actuationOk = fresh(actuation?.age)
+
+    // Auto-reset each foot's zero baseline on a fresh connect (offline ->
+    // online). The baseline is a running minimum that only ever ratchets
+    // down and never recovers on its own - over a long session, a single
+    // noisy low sample anywhere permanently corrupts the zero point from
+    // then on. Resetting on reconnect means a board coming back up (which
+    // happens a lot over hours of testing/power-cycling) gets a clean floor
+    // instead of inheriting hours of accumulated drift.
+    if (lOk && !s.lWasOk) s.baseL = {}
+    if (rOk && !s.rWasOk) s.baseR = {}
+    s.lWasOk = lOk
+    s.rWasOk = rOk
 
     const load = (arr, base) => {
       if (!arr) return 0
