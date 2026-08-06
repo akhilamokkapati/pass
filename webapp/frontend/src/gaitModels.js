@@ -7,10 +7,7 @@ export const GAIT_MODELS = [
   { id: 'michelle', label: 'Michelle', path: '/Michelle.glb' },
   { id: 'soldier', label: 'Soldier', path: '/Soldier.glb' },
   // FBX imports (Mixamo characters). Mixamo FBX exports are authored in
-  // centimeters, unlike the meter-scale GLBs above, hence the 0.01 scale -
-  // confirmed working (Y Bot checked first as the simplest case) before
-  // adding the rest at the same scale.
-  { id: 'ybot', label: 'Y Bot', path: '/fbx/Y Bot.fbx', scale: 0.01 },
+  // centimeters, unlike the meter-scale GLBs above, hence the 0.01 scale.
   { id: 'bigvegas', label: 'Big Vegas', path: '/fbx/Big Vegas.fbx', scale: 0.01 },
   { id: 'brute', label: 'Brute', path: '/fbx/Brute.fbx', scale: 0.01 },
   { id: 'arissa', label: 'Arissa', path: '/fbx/Arissa.fbx', scale: 0.01 },
