@@ -38,6 +38,7 @@ from .backend import ingest
 
 STALE_S = 1.2          # only forward a part if it's this fresh locally
 PUSH_INTERVAL_S = 0.2  # 5 Hz
+CMD_POLL_INTERVAL_S = 0.3
 
 
 def _fresh_parts() -> dict:
@@ -91,6 +92,24 @@ def _push_loop(url: str, key: str) -> None:
         time.sleep(PUSH_INTERVAL_S)
 
 
+def _cmd_poll_loop(url: str, key: str) -> None:
+    """Drain commands queued on the remote backend (dashboard buttons calling
+    /api/actuation/command) and re-broadcast each on the LAN so it actually
+    reaches the board - mirrors _push_loop but in the opposite direction."""
+    endpoint = url.rstrip("/") + "/api/actuation/pending"
+    while True:
+        req = urllib.request.Request(endpoint, method="GET", headers={"X-Relay-Key": key})
+        try:
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read())
+            for c in data.get("commands", []):
+                ingest.send_command(c["cmd"], c.get("value", 0.0))
+                print(f"# relay: forwarded command {c['cmd']}={c.get('value', 0.0)} to board")
+        except Exception:
+            pass  # network hiccup, cold-start wake-up, etc. - next poll catches up
+        time.sleep(CMD_POLL_INTERVAL_S)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--url", default=os.environ.get("PASS_RELAY_URL"),
@@ -105,6 +124,8 @@ def main() -> None:
     for port, kind in ((ingest.PORT_HIP, "hip"), (ingest.PORT_KNEE, "knee"), (ingest.PORT_FEET, "feet"),
                        (ingest.PORT_ACTUATION, "actuation")):
         threading.Thread(target=ingest._udp_listener, args=(port, kind), daemon=True).start()
+
+    threading.Thread(target=_cmd_poll_loop, args=(args.url, args.key), daemon=True).start()
 
     print(f"# relay: listening for hip/knee/feet/actuation UDP, pushing live parts to {args.url}")
     _push_loop(args.url, args.key)

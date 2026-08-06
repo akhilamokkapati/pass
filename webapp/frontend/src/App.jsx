@@ -7,6 +7,7 @@ import PatientView from './PatientView.jsx'
 import ClinicianView from './ClinicianView.jsx'
 import GaitView from './GaitView.jsx'
 import DevicesPanel from './DevicesPanel.jsx'
+import ActuationPanel from './ActuationPanel.jsx'
 
 const KNEE_TARGET = 60
 const THEME_KEY = 'pass_theme'
@@ -51,6 +52,7 @@ export default function App() {
               {session.role === 'clinician' ? 'Clinician' : 'Patient'}
             </button>
             <button className={tab === 'gait' ? 'on' : ''} onClick={() => setTab('gait')}>Gait</button>
+            <button className={tab === 'session' ? 'on' : ''} onClick={() => setTab('session')}>Session</button>
           </div>
           <button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             title="Toggle light/dark mode" aria-label="Toggle light/dark mode">
@@ -81,6 +83,7 @@ export default function App() {
       {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} />}
       {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} />}
       {tab === 'gait' && <GaitView m={m} />}
+      {tab === 'session' && <ActuationPanel m={m} />}
 
       <div className="actions">
         <button className="btn ghost" onClick={zeroHip}>Zero hip (stand tall)</button>

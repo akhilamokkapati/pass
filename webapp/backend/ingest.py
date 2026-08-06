@@ -15,6 +15,7 @@ module just records last-seen times).
 from __future__ import annotations
 
 import socket
+import threading
 import time
 
 PORT_FEET = 5006
@@ -155,3 +156,24 @@ def send_command(cmd: str, value: float = 0.0) -> None:
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     s.sendto(line, ("192.168.0.255", PORT_ACTUATION_CMD))
     s.close()
+
+
+_pending_commands: list[dict] = []
+_cmd_lock = threading.Lock()
+
+
+def queue_command(cmd: str, value: float = 0.0) -> None:
+    """Queue a command for relay.py to pick up and re-broadcast on the LAN.
+    Needed when this process has no direct path to the board (e.g. running on
+    Render) - send_command() alone is a silent no-op there since 192.168.0.255
+    doesn't route anywhere real from the cloud."""
+    with _cmd_lock:
+        _pending_commands.append({"cmd": cmd, "value": value})
+
+
+def drain_commands() -> list[dict]:
+    """Pop and return all commands queued since the last drain."""
+    with _cmd_lock:
+        out = list(_pending_commands)
+        _pending_commands.clear()
+    return out

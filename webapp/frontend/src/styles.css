@@ -127,6 +127,7 @@ body {
 .accent-knee { box-shadow: inset 0 3px 0 #4ea1ff, 0 12px 36px #0008; }
 .accent-hip { box-shadow: inset 0 3px 0 #f6c24b, 0 12px 36px #0008; }
 .accent-balance { box-shadow: inset 0 3px 0 #3ddc84, 0 12px 36px #0008; }
+.accent-actuation { box-shadow: inset 0 3px 0 #c77bf0, 0 12px 36px #0008; }
 .card.off { opacity: .72; }
 .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 10px; }
 .card-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
@@ -138,6 +139,29 @@ body {
 .grid.patient { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 1180px) { .grid.patient { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .grid.patient { grid-template-columns: 1fr; } }
+
+/* ---- actuation / session tab ---- */
+.grid.actuation { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) { .grid.actuation { grid-template-columns: 1fr; } }
+.act-tension { font-size: 44px; font-weight: 800; margin-top: 6px; }
+.act-tension span { font-size: 18px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.act-tension.small { font-size: 20px; font-weight: 700; margin-top: 6px; }
+.act-level { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-bottom: 14px; }
+.act-level span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.act-level input[type="range"] { width: 100%; accent-color: #c77bf0; }
+.act-countdown { font-size: 64px; font-weight: 800; color: #c77bf0; margin: 10px 0; }
+.act-session .btn { margin-top: 4px; }
+.act-summary { width: 100%; text-align: left; font-size: 14px; color: var(--text); line-height: 1.9; }
+.act-summary-title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+.act-summary-actions { display: flex; gap: 10px; margin-top: 10px; }
+.act-summary-actions .btn { margin-top: 0; flex: 1; }
+.act-jog { display: flex; gap: 10px; width: 100%; }
+.act-jog .btn { flex: 1; margin-top: 4px; user-select: none; }
+.act-force-stop {
+  grid-column: 1 / -1; border-color: #7a2330; color: #ff8a94; background: #2a1116;
+  font-weight: 700; letter-spacing: .3px;
+}
+.act-force-stop:active { background: #3a161c; }
 
 .ring { display: block; margin: 8px 0 2px; filter: drop-shadow(0 4px 12px #0004); }
 .ring-val { font-size: 54px; font-weight: 800; fill: var(--text); }

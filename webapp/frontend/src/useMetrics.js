@@ -47,12 +47,13 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   useEffect(() => {
     if (!snap) return
     const s = S.current
-    const { knee, hip, feet } = snap
+    const { knee, hip, feet, actuation } = snap
     const kneeLOk = fresh(knee?.left?.age)
     const kneeROk = fresh(knee?.right?.age)
     const hipOk = fresh(hip?.age)
     const lOk = fresh(feet?.left?.age)
     const rOk = fresh(feet?.right?.age)
+    const actuationOk = fresh(actuation?.age)
 
     const load = (arr, base) => {
       if (!arr) return 0
@@ -136,6 +137,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       loadL, loadR, lOk, rOk,
       footPhaseL: lOk ? s.footPhaseL : null, footPhaseR: rOk ? s.footPhaseR : null,
       repsL: s.repsL, repsR: s.repsR, hist: s.hist,
+      actuationOk, actuationTension: actuationOk ? actuation.tension_n : null,
+      actuationState: actuationOk ? actuation.state : null,
       anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
       calibratedL: !!s.calL, calibratedR: !!s.calR,
       calPhase: s.calPhase, calMsg: s.calMsg,

@@ -100,19 +100,30 @@ async def api_ingest(request: Request) -> dict:
 
 @app.post("/api/actuation/command")
 async def api_actuation_command(request: Request) -> dict:
-    """Send a command to the actuation board. Only works when THIS process is
-    running on the same LAN as the board (broadcasts on the local subnet,
-    same as ingest's UDP listeners) - calling this on the Render deployment
-    is a no-op right now, since the cloud has no path to the board yet. That
-    remote path (proxying through relay.py) isn't built - this just proves
-    the local laptop -> board command loop works."""
+    """Send a command to the actuation board. Always queues it for relay.py to
+    drain and re-broadcast on the LAN (the path that matters when this backend
+    is hosted remotely, e.g. Render), and also attempts a direct local
+    broadcast (a no-op unless this process happens to be on the same LAN as
+    the board) - so the same endpoint works whether running locally or not."""
     body = await request.json()
     cmd = body.get("cmd")
     value = float(body.get("value", 0))
     if not cmd:
         raise HTTPException(status_code=400, detail="missing 'cmd'")
     ingest.send_command(cmd, value)
+    ingest.queue_command(cmd, value)
     return {"ok": True, "cmd": cmd, "value": value}
+
+
+@app.get("/api/actuation/pending")
+async def api_actuation_pending(request: Request) -> dict:
+    """Polled by relay.py to fetch commands queued via /api/actuation/command
+    that still need forwarding to the LAN-local board. Gated by the same
+    RELAY_KEY as /api/ingest - only a relay bridging this backend to a real
+    LAN should be draining this."""
+    if not RELAY_KEY or request.headers.get("x-relay-key") != RELAY_KEY:
+        raise HTTPException(status_code=403, detail="bad or missing relay key")
+    return {"commands": ingest.drain_commands()}
 
 
 @app.websocket("/ws")
