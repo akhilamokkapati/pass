@@ -62,6 +62,13 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     footPhaseL: 'stance', footPhaseR: 'stance',
     repPeakL: 0, repPeakHipL: 0, repStartTL: null, formFlagL: '',
     repPeakR: 0, repPeakHipR: 0, repStartTR: null, formFlagR: '',
+    // Two physically different insole boards rarely have matched raw
+    // sensitivity (FSR batch/wiring variance) - comparing raw baseline-
+    // subtracted sums directly can skew the balance split even with a
+    // perfect zero. balScaleR corrects the RIGHT reading to match the LEFT
+    // reading's scale, captured once via calibrateBalance() while standing
+    // evenly (assumed 50/50 - the only reference this software has).
+    balScaleR: 1, lastLoadL: null, lastLoadR: null, calMsgBalance: '',
   })
   const [m, setM] = useState(null)
 
@@ -92,7 +99,10 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       return sum
     }
     const loadL = lOk ? load(feet.left.c, s.baseL) : 0
-    const loadR = rOk ? load(feet.right.c, s.baseR) : 0
+    const loadRraw = rOk ? load(feet.right.c, s.baseR) : 0
+    const loadR = loadRraw * s.balScaleR
+    s.lastLoadL = lOk ? loadL : null
+    s.lastLoadR = rOk ? loadRraw : null
 
     // Heel-specific load (subset of channels, not the whole-foot total) drives
     // stance/swing phase for the gait avatar's feet.
@@ -217,6 +227,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       formFlagL: s.formFlagL, formFlagR: s.formFlagR,
       hipFlexL, hipFlexR, hipFlexCalibratedL: !!s.calHipL, hipFlexCalibratedR: !!s.calHipR,
       calPhaseHip: s.calPhaseHip, calMsgHip: s.calMsgHip,
+      calMsgBalance: s.calMsgBalance,
       actuationOk, actuationTension: actuationOk ? actuation.tension_n : null,
       actuationState: actuationOk ? actuation.state : null,
       anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
@@ -232,6 +243,26 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   // session with no way to fix it except this. Lift both feet off the
   // insoles before clicking so the next samples become the new floor.
   const zeroFeet = () => { S.current.baseL = {}; S.current.baseR = {} }
+
+  // One-shot fix for the two insoles having different raw sensitivity:
+  // capture the L/R ratio while standing evenly and use it to scale the
+  // right reading to match the left from then on. This ASSUMES the stance
+  // at calibration time was genuinely 50/50 - there's no independent way to
+  // verify that without a reference scale, so the message says so plainly.
+  const MIN_BALANCE_CAL_LOAD = 150
+  const calibrateBalance = () => {
+    const s = S.current
+    if (s.lastLoadL == null || s.lastLoadR == null) {
+      s.calMsgBalance = 'Waiting for both feet - try again in a moment'
+      return
+    }
+    if (s.lastLoadL < MIN_BALANCE_CAL_LOAD || s.lastLoadR < MIN_BALANCE_CAL_LOAD) {
+      s.calMsgBalance = 'Stand evenly on both feet with real weight, then try again'
+      return
+    }
+    s.balScaleR = s.lastLoadL / s.lastLoadR
+    s.calMsgBalance = 'Balance calibrated - assumes that stance was even 50/50'
+  }
   const resetReps = () => {
     const s = S.current
     s.repsL = 0; s.repsR = 0
@@ -350,5 +381,5 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.calMsgHip = results.length ? results.join(', ') : 'Movement too small - hold each pose still and try again'
   }
 
-  return { m, zeroHip, zeroFeet, resetReps, calibrateKnees, calibrateHips }
+  return { m, zeroHip, zeroFeet, resetReps, calibrateKnees, calibrateHips, calibrateBalance }
 }

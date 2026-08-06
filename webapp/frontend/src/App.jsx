@@ -27,7 +27,7 @@ function useTheme() {
 
 export default function App() {
   const { snap, connected } = useSocket()
-  const { m, zeroHip, zeroFeet, resetReps, calibrateKnees, calibrateHips } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
+  const { m, zeroHip, zeroFeet, resetReps, calibrateKnees, calibrateHips, calibrateBalance } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
   const [session, setSession] = useState(() => getSession())
   const [theme, setTheme] = useTheme()
   // Own-role view vs the shared Gait tab - not a free-for-all switcher anymore;
@@ -88,6 +88,7 @@ export default function App() {
       <div className="actions">
         <button className="btn ghost" onClick={zeroHip}>Zero hip (stand tall)</button>
         <button className="btn ghost" onClick={zeroFeet}>Zero feet (lift both off insoles)</button>
+        <button className="btn ghost" onClick={calibrateBalance}>Calibrate balance (stand evenly)</button>
         <button className="btn ghost" onClick={resetReps}>Reset reps</button>
         <button className={`btn ghost ${m?.calPhase === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKnees}>
           {m?.calPhase === 'awaiting-bent' ? 'Capture bent' : 'Calibrate knees'}
@@ -98,6 +99,7 @@ export default function App() {
       </div>
       {m?.calMsg && <div className="cal-msg center-msg">{m.calMsg}</div>}
       {m?.calMsgHip && <div className="cal-msg center-msg">{m.calMsgHip}</div>}
+      {m?.calMsgBalance && <div className="cal-msg center-msg">{m.calMsgBalance}</div>}
 
       <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
     </div>
