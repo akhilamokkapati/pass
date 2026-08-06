@@ -21,6 +21,16 @@ const SESSION_MAX = 108000   // ~90min at 20Hz - keep the full session for CSV e
 const HEEL_STANCE_ON = 150   // heel load above this -> stance (foot down)
 const HEEL_STANCE_OFF = 50   // heel load below this -> swing (foot lifted)
 
+// Per-rep form checks, evaluated once a rep completes. Thresholds follow the
+// same "error tolerance" idea used in knee-OA rehab literature (e.g. Chen et
+// al. 2015's SAE/SLR/QSM alteration table) - not reading the exercise TYPE
+// (the UI already knows that), just flagging the same failure modes: not
+// reaching target flexion, trunk/hip compensation, and moving too fast to
+// control. Priority order below matches severity, not literature order.
+const FORM_TARGET_MARGIN = 0.95     // peak angle must reach this fraction of kneeTarget
+const FORM_HIP_COMPENSATION_DEG = 15
+const FORM_MIN_REP_S = 0.4
+
 // Derives display metrics from the raw socket snapshot: foot loads (baseline
 // removed), left/right balance, hip tilt-from-neutral, knee rep counting, and a
 // rolling history buffer for the clinician time charts. Keeps per-channel foot
@@ -40,6 +50,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     calPhase: 'idle', calCaptureL: null, calCaptureR: null, calMsg: '',
     footLayout: null, heelBaseL: {}, heelBaseR: {},
     footPhaseL: 'stance', footPhaseR: 'stance',
+    repPeakL: 0, repPeakHipL: 0, repStartTL: null, formFlagL: '',
+    repPeakR: 0, repPeakHipR: 0, repStartTR: null, formFlagR: '',
   })
   const [m, setM] = useState(null)
 
@@ -124,14 +136,46 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       : null
 
     // knee rep counter (each side independent): extended (<15) -> past 80% of
-    // target -> back to extended
+    // target -> back to extended. While "up", track this rep's peak flexion
+    // and peak hip-tilt magnitude so a form flag can be judged the moment it
+    // completes.
+    const judgeForm = (peakAngle, peakHip, durationS) => {
+      if (peakAngle < kneeTarget * FORM_TARGET_MARGIN) return "Didn't reach target - bend a little further"
+      if (peakHip > FORM_HIP_COMPENSATION_DEG) return 'Leaning / hip compensation - keep hips level'
+      if (durationS != null && durationS < FORM_MIN_REP_S) return 'Too fast - control the movement'
+      return ''
+    }
     if (kneeLOk) {
-      if (s.phaseL === 'down' && kneeLAngle > kneeTarget * 0.8) s.phaseL = 'up'
-      else if (s.phaseL === 'up' && kneeLAngle < 15) { s.phaseL = 'down'; s.repsL += 1 }
+      if (s.phaseL === 'down' && kneeLAngle > kneeTarget * 0.8) {
+        s.phaseL = 'up'
+        s.repPeakL = kneeLAngle
+        s.repPeakHipL = hipOk ? Math.abs(hipTilt) : 0
+        s.repStartTL = snap.t
+      } else if (s.phaseL === 'up') {
+        if (kneeLAngle > s.repPeakL) s.repPeakL = kneeLAngle
+        if (hipOk && Math.abs(hipTilt) > s.repPeakHipL) s.repPeakHipL = Math.abs(hipTilt)
+        if (kneeLAngle < 15) {
+          s.phaseL = 'down'; s.repsL += 1
+          const duration = s.repStartTL != null ? snap.t - s.repStartTL : null
+          s.formFlagL = judgeForm(s.repPeakL, s.repPeakHipL, duration)
+        }
+      }
     }
     if (kneeROk) {
-      if (s.phaseR === 'down' && kneeRAngle > kneeTarget * 0.8) s.phaseR = 'up'
-      else if (s.phaseR === 'up' && kneeRAngle < 15) { s.phaseR = 'down'; s.repsR += 1 }
+      if (s.phaseR === 'down' && kneeRAngle > kneeTarget * 0.8) {
+        s.phaseR = 'up'
+        s.repPeakR = kneeRAngle
+        s.repPeakHipR = hipOk ? Math.abs(hipTilt) : 0
+        s.repStartTR = snap.t
+      } else if (s.phaseR === 'up') {
+        if (kneeRAngle > s.repPeakR) s.repPeakR = kneeRAngle
+        if (hipOk && Math.abs(hipTilt) > s.repPeakHipR) s.repPeakHipR = Math.abs(hipTilt)
+        if (kneeRAngle < 15) {
+          s.phaseR = 'down'; s.repsR += 1
+          const duration = s.repStartTR != null ? snap.t - s.repStartTR : null
+          s.formFlagR = judgeForm(s.repPeakR, s.repPeakHipR, duration)
+        }
+      }
     }
 
     s.hist.push({ t: snap.t, kneeL: kneeLAngle, kneeR: kneeRAngle, hip: hipTilt, loadL, loadR })
@@ -142,6 +186,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       loadL, loadR, lOk, rOk,
       footPhaseL: lOk ? s.footPhaseL : null, footPhaseR: rOk ? s.footPhaseR : null,
       repsL: s.repsL, repsR: s.repsR, hist: s.hist,
+      formFlagL: s.formFlagL, formFlagR: s.formFlagR,
       actuationOk, actuationTension: actuationOk ? actuation.tension_n : null,
       actuationState: actuationOk ? actuation.state : null,
       anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
@@ -151,7 +196,11 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   }, [snap?.t, kneeTarget])
 
   const zeroHip = () => { S.current.hipRef = null }
-  const resetReps = () => { S.current.repsL = 0; S.current.repsR = 0 }
+  const resetReps = () => {
+    const s = S.current
+    s.repsL = 0; s.repsR = 0
+    s.formFlagL = ''; s.formFlagR = ''
+  }
 
   // One button drives both knees through the same two-click flow, mirroring
   // axis_calibration.py: first click captures a short averaged window of the

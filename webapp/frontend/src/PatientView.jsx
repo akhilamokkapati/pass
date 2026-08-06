@@ -32,7 +32,7 @@ function BalanceBar({ m }) {
   )
 }
 
-function KneeCard({ title, ok, angle, reps, kneeTarget }) {
+function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag }) {
   const reached = ok && angle >= kneeTarget
   return (
     <div className={`card center accent-knee ${ok ? '' : 'off'}`}>
@@ -45,6 +45,7 @@ function KneeCard({ title, ok, angle, reps, kneeTarget }) {
           <div className={`cue ${reached ? 'good' : ''}`}>
             {reached ? 'Target reached' : 'Keep bending'}
           </div>
+          {formFlag && <div className="form-flag">{formFlag}</div>}
         </>
       ) : <div className="cue">Waiting for sensor</div>}
     </div>
@@ -59,9 +60,9 @@ export default function PatientView({ m, kneeTarget }) {
   return (
     <div className="grid patient">
       <KneeCard title="Left knee bend" ok={!!m?.kneeLOk} angle={m?.kneeLAngle}
-        reps={m?.repsL} kneeTarget={kneeTarget} />
+        reps={m?.repsL} kneeTarget={kneeTarget} formFlag={m?.formFlagL} />
       <KneeCard title="Right knee bend" ok={!!m?.kneeROk} angle={m?.kneeRAngle}
-        reps={m?.repsR} kneeTarget={kneeTarget} />
+        reps={m?.repsR} kneeTarget={kneeTarget} formFlag={m?.formFlagR} />
 
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />
