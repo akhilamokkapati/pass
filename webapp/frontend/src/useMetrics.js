@@ -226,6 +226,12 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   }, [snap?.t, kneeTarget])
 
   const zeroHip = () => { S.current.hipRef = null }
+  // The per-channel baseline is a running minimum that only ever tightens,
+  // never resets - if a channel's very first sample wasn't a true zero-load
+  // moment, every reading afterward inherits that skew for the rest of the
+  // session with no way to fix it except this. Lift both feet off the
+  // insoles before clicking so the next samples become the new floor.
+  const zeroFeet = () => { S.current.baseL = {}; S.current.baseR = {} }
   const resetReps = () => {
     const s = S.current
     s.repsL = 0; s.repsR = 0
@@ -344,5 +350,5 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.calMsgHip = results.length ? results.join(', ') : 'Movement too small - hold each pose still and try again'
   }
 
-  return { m, zeroHip, resetReps, calibrateKnees, calibrateHips }
+  return { m, zeroHip, zeroFeet, resetReps, calibrateKnees, calibrateHips }
 }
