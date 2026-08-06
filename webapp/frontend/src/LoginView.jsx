@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signUp, logIn } from './auth.js'
+import { signUp, logIn, guestLogin } from './auth.js'
 
 export default function LoginView({ onAuth }) {
   const [mode, setMode] = useState('login') // 'login' | 'signup'
@@ -7,17 +7,22 @@ export default function LoginView({ onAuth }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('patient')
+  const [age, setAge] = useState('')
+  const [gender, setGender] = useState('')
+  const [condition, setCondition] = useState('')
   const [error, setError] = useState('')
 
   const submit = (e) => {
     e.preventDefault()
     const result = mode === 'login'
       ? logIn({ email, password })
-      : signUp({ name, email, password, role })
+      : signUp({ name, email, password, role, age: age ? Number(age) : null, gender, condition })
     if (!result.ok) { setError(result.error); return }
     setError('')
     onAuth(result.session)
   }
+
+  const guest = (guestRole) => onAuth(guestLogin(guestRole).session)
 
   return (
     <div className="auth-wrap">
@@ -62,12 +67,48 @@ export default function LoginView({ onAuth }) {
             </div>
           )}
 
+          {mode === 'signup' && (
+            <div className="auth-row">
+              <label className="auth-field">
+                <span>Age</span>
+                <input type="number" min="0" max="120" value={age} onChange={(e) => setAge(e.target.value)} placeholder="34" />
+              </label>
+              <label className="auth-field">
+                <span>Gender</span>
+                <select value={gender} onChange={(e) => setGender(e.target.value)}>
+                  <option value="">Prefer not to say</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+            </div>
+          )}
+
+          {mode === 'signup' && (
+            <label className="auth-field">
+              <span>Condition / focus (optional)</span>
+              <input value={condition} onChange={(e) => setCondition(e.target.value)}
+                placeholder="e.g. Right knee ACL recovery" />
+            </label>
+          )}
+
           {error && <div className="auth-error">{error}</div>}
 
           <button type="submit" className="btn download auth-submit">
             {mode === 'login' ? 'Log in' : 'Create account'}
           </button>
         </form>
+
+        {mode === 'login' && (
+          <div className="auth-guest">
+            <div className="auth-divider"><span>or</span></div>
+            <div className="auth-guest-row">
+              <button type="button" className="btn ghost" onClick={() => guest('patient')}>Continue as guest (Patient)</button>
+              <button type="button" className="btn ghost" onClick={() => guest('clinician')}>Continue as guest (Clinician)</button>
+            </div>
+          </div>
+        )}
 
         <div className="auth-note">
           Demo login - accounts are stored in this browser only, not a real server.

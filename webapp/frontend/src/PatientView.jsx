@@ -1,5 +1,6 @@
 import Ring from './Ring.jsx'
 import { StatusPill } from './ui.jsx'
+import { profileSummary } from './auth.js'
 
 function Head({ title, ok }) {
   return <div className="card-head"><h3>{title}</h3><StatusPill ok={ok} /></div>
@@ -57,13 +58,16 @@ function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag, hipFlex, hipFl
   )
 }
 
-export default function PatientView({ m, kneeTarget }) {
+export default function PatientView({ m, kneeTarget, session }) {
   const hipOk = !!m?.hipOk
   const feetOk = !!(m?.lOk || m?.rOk)
   const hipLevel = hipOk && m.hipTilt < 10
+  const profile = profileSummary(session)
 
   return (
-    <div className="grid patient">
+    <div className="patient-wrap">
+      {profile && <div className="patient-profile">Personalizing for {profile}</div>}
+      <div className="grid patient">
       <KneeCard title="Left knee bend" ok={!!m?.kneeLOk} angle={m?.kneeLAngle}
         reps={m?.repsL} kneeTarget={kneeTarget} formFlag={m?.formFlagL}
         hipFlex={m?.hipFlexL} hipFlexCalibrated={!!m?.hipFlexCalibratedL} />
@@ -83,6 +87,7 @@ export default function PatientView({ m, kneeTarget }) {
         <div className={`cue ${hipOk && hipLevel ? 'good' : ''}`}>
           {hipOk ? (hipLevel ? 'Level' : 'Straighten up') : 'Waiting for sensor'}
         </div>
+      </div>
       </div>
     </div>
   )

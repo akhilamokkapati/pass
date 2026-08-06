@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSocket } from './useSocket.js'
 import { useMetrics } from './useMetrics.js'
-import { getSession, logOut } from './auth.js'
+import { getSession, logOut, profileSummary } from './auth.js'
 import LoginView from './LoginView.jsx'
 import PatientView from './PatientView.jsx'
 import ClinicianView from './ClinicianView.jsx'
@@ -63,7 +63,7 @@ export default function App() {
             {connected ? 'server online' : 'server offline'}
           </div>
           <div className="user-chip">
-            <span className="user-name">{session.name}</span>
+            <span className="user-name" title={profileSummary(session) || undefined}>{session.name}</span>
             <span className="user-role">{session.role}</span>
             <button className="btn ghost user-logout" onClick={handleLogout}>Log out</button>
           </div>
@@ -81,7 +81,7 @@ export default function App() {
       )}
 
       {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} />}
-      {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} />}
+      {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} />}
       {tab === 'gait' && <GaitView m={m} />}
       {tab === 'session' && <ActuationPanel m={m} />}
 

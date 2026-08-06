@@ -77,13 +77,20 @@ body {
 .auth-tabs button.on { background: linear-gradient(90deg, #2b6fd6, #2f8f74); color: #fff; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 .auth-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
-.auth-field input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
-.auth-field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.auth-field input, .auth-field select { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
+.auth-field input:focus, .auth-field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .auth-role { display: flex; gap: 8px; }
 .auth-role button { flex: 1; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: 13px; padding: 9px 0; border-radius: 10px; cursor: pointer; }
 .auth-role button.on { background: linear-gradient(90deg, #2b6fd6, #2f8f74); color: #fff; border-color: transparent; }
+.auth-row { display: flex; gap: 10px; }
+.auth-row .auth-field { flex: 1; min-width: 0; }
 .auth-error { color: #ff6b6b; font-size: 13px; font-weight: 600; }
 .auth-submit { width: 100%; justify-content: center; margin-top: 4px; }
+.auth-guest { margin-top: 18px; }
+.auth-divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.auth-guest-row { display: flex; flex-direction: column; gap: 8px; }
+.auth-guest-row .btn { width: 100%; justify-content: center; }
 .auth-note { margin-top: 16px; text-align: center; color: var(--muted); font-size: 12px; }
 
 /* ---- status pill ---- */
@@ -135,6 +142,8 @@ body {
 .center .card-head { width: 100%; }
 
 /* ---- patient grid ---- */
+.patient-wrap { display: flex; flex-direction: column; gap: 10px; }
+.patient-profile { color: var(--muted); font-size: 13px; text-align: center; }
 .grid { display: grid; gap: 16px; }
 .grid.patient { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 1180px) { .grid.patient { grid-template-columns: repeat(2, 1fr); } }
