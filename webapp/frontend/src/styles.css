@@ -172,6 +172,7 @@ body {
 .cue { margin-top: 8px; color: var(--muted); font-size: 14px; min-height: 20px; }
 .cue.good { color: var(--ok); font-weight: 700; }
 .form-flag { margin-top: 6px; color: var(--warn); font-size: 13px; font-weight: 600; }
+.hip-flex-stat { margin-top: 6px; color: var(--muted); font-size: 13px; }
 
 .btn.ghost.on { color: var(--warn); border-color: #6b5420; background: #241d0f; }
 .cal-msg.center-msg { text-align: center; color: var(--warn); font-size: 13px; margin-top: -6px; margin-bottom: 4px; }

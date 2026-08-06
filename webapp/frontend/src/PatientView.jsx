@@ -32,7 +32,7 @@ function BalanceBar({ m }) {
   )
 }
 
-function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag }) {
+function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag, hipFlex, hipFlexCalibrated }) {
   const reached = ok && angle >= kneeTarget
   return (
     <div className={`card center accent-knee ${ok ? '' : 'off'}`}>
@@ -46,6 +46,11 @@ function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag }) {
             {reached ? 'Target reached' : 'Keep bending'}
           </div>
           {formFlag && <div className="form-flag">{formFlag}</div>}
+          {hipFlexCalibrated && (
+            <div className="hip-flex-stat">
+              Hip flexion: {hipFlex != null ? `${hipFlex.toFixed(0)}°` : '--'}
+            </div>
+          )}
         </>
       ) : <div className="cue">Waiting for sensor</div>}
     </div>
@@ -60,9 +65,11 @@ export default function PatientView({ m, kneeTarget }) {
   return (
     <div className="grid patient">
       <KneeCard title="Left knee bend" ok={!!m?.kneeLOk} angle={m?.kneeLAngle}
-        reps={m?.repsL} kneeTarget={kneeTarget} formFlag={m?.formFlagL} />
+        reps={m?.repsL} kneeTarget={kneeTarget} formFlag={m?.formFlagL}
+        hipFlex={m?.hipFlexL} hipFlexCalibrated={!!m?.hipFlexCalibratedL} />
       <KneeCard title="Right knee bend" ok={!!m?.kneeROk} angle={m?.kneeRAngle}
-        reps={m?.repsR} kneeTarget={kneeTarget} formFlag={m?.formFlagR} />
+        reps={m?.repsR} kneeTarget={kneeTarget} formFlag={m?.formFlagR}
+        hipFlex={m?.hipFlexR} hipFlexCalibrated={!!m?.hipFlexCalibratedR} />
 
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />
