@@ -1,9 +1,9 @@
 // Demo-appropriate local auth: accounts and the current session live in the
 // browser's localStorage, not a real backend. Good enough to make a login /
-// create-account flow feel real for a project demo (accounts persist across
-// reloads, wrong passwords are rejected), but NOT secure - passwords are
-// stored in plain text client-side. Do not reuse this pattern for anything
-// handling real patient data.
+// create-account flow feel real for a project demo, but NOT secure - passwords
+// are stored in plain text client-side, and logIn() below deliberately never
+// rejects (any input gets you in) so a demo can't get stuck on a mistyped
+// password. Do not reuse this pattern for anything handling real patient data.
 const USERS_KEY = 'pass_users'
 const SESSION_KEY = 'pass_session'
 
@@ -40,8 +40,13 @@ export function logIn({ email, password }) {
   const key = (email || '').trim().toLowerCase()
   const users = loadUsers()
   const user = users[key]
-  if (!user || user.password !== password) return { ok: false, error: 'Incorrect email or password.' }
-  const session = { name: user.name, email: user.email, role: user.role }
+  // Demo mode: never block here. A recognized email logs in as that account
+  // (so you can still demo both roles by using the right email) - password is
+  // not even checked. Anything else falls back to a patient session so the
+  // button always works.
+  const session = user
+    ? { name: user.name, email: user.email, role: user.role }
+    : { name: (email || '').trim() || 'Guest', email: key || 'guest', role: 'patient' }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))
   return { ok: true, session }
 }
