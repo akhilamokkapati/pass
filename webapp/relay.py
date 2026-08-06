@@ -36,7 +36,11 @@ import urllib.request
 
 from .backend import ingest
 
-STALE_S = 1.2          # only forward a part if it's this fresh locally
+STALE_S = 3.0          # only forward a part if it's this fresh locally - widened
+                        # to match the frontend's own widened threshold (see
+                        # useMetrics.js): a brief local UDP gap shouldn't drop
+                        # a node out of the payload and start its Render-side
+                        # age climbing for no reason
 PUSH_INTERVAL_S = 0.2  # 5 Hz
 CMD_POLL_INTERVAL_S = 0.3
 

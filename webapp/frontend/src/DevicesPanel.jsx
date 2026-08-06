@@ -2,7 +2,7 @@
 // Battery shows only if a node reports it (needs the battery divider mod);
 // otherwise it shows "--". Nodes not yet on the network read "offline".
 
-const STALE = 1.5
+const STALE = 4   // see useMetrics.js - widened to tolerate wireless-pipeline jitter
 const fresh = (age) => age != null && age < STALE
 
 // The full 6-node platform. `get` pulls that node's slice from the snapshot.

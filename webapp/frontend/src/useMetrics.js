@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { tiltDeg, qrelative, qaverage, qcanon, angleAboutAxisDeg, axisAngle } from './quat.js'
 
-const STALE = 1.5
+// Widened from 1.5s: a two-hop wireless pipeline (board -> router -> laptop
+// -> relay -> Render -> browser) will drop the odd packet even when every
+// node in the chain is healthy. 1.5s flagged those as "offline" and flickered
+// the UI; 4s tolerates a few dropped packets/relay hiccups while still
+// catching a genuinely disconnected node within a few seconds.
+const STALE = 4
 export const fresh = (age) => age != null && age < STALE
 const CAL_BUF_MAX = 12       // ~0.5-0.6s of samples at 20Hz to average per capture
 const MIN_BEND_DEG = 15      // reject a calibration bend this small or smaller

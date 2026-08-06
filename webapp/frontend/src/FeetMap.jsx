@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { StatusPill } from './ui.jsx'
 
-const STALE = 1.5
+const STALE = 4   // see useMetrics.js - widened to tolerate wireless-pipeline jitter
 const DEFAULT_FULL_SCALE = 3400 // inverted-ADC value that reads as "full" pressure
 const SENS_KEY = 'pass_feet_full_scale'
 
