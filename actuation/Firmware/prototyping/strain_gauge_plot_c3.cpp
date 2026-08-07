@@ -1,5 +1,6 @@
 // Strain gauge test via HX711 (bridge completed with 3 fixed resistors),
-// XIAO ESP32-S3. Formatted output (>name:value) for live plotting.
+// XIAO ESP32-C3. Formatted output (>name:value) for live plotting.
+// Duplicate of strain_gauge_plot.cpp (S3) for the C3 board on COM14.
 
 #include <Arduino.h>
 #include <HX711.h>
@@ -16,14 +17,13 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
-  scale.begin(HX711_DT, HX711_SCK); 
+  scale.begin(HX711_DT, HX711_SCK);
 }
 
 void loop() {
   unsigned long now = millis();
   if (now - lastPrintMs < PRINT_INTERVAL_MS) return;
   lastPrintMs = now;
-  
 
   if (scale.is_ready()) {
     Serial.print(">strain:");
