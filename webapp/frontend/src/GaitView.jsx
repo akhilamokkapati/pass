@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react'
+import { Suspense, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import GaitAvatar from './GaitAvatar.jsx'
@@ -11,6 +11,7 @@ export default function GaitView({ m }) {
   const kneeLOk = !!m?.kneeLOk
   const kneeROk = !!m?.kneeROk
   const [modelId, setModelId] = useState(() => localStorage.getItem('pass_gait_model') || DEFAULT_GAIT_MODEL)
+  const controlsRef = useRef(null)
   const pickModel = (id) => { setModelId(id); localStorage.setItem('pass_gait_model', id) }
   const model = GAIT_MODELS.find((mo) => mo.id === modelId) || GAIT_MODELS[0]
 
@@ -43,8 +44,9 @@ export default function GaitView({ m }) {
             />
           </Suspense>
           <Grid args={[10, 10]} position={[0, 0, 0]} cellColor="#29313d" sectionColor="#3a4552" fadeDistance={12} />
-          <OrbitControls target={[0, 0.9, 0]} enableDamping />
+          <OrbitControls ref={controlsRef} target={[0, 0.9, 0]} enableDamping />
         </Canvas>
+        <button className="gait-centre" onClick={() => controlsRef.current?.reset()}>Centre view</button>
         {!kneeLOk && !kneeROk && (
           <div className="gait-hint">No live knee data - showing the rest pose. Power on a knee node to see it move.</div>
         )}

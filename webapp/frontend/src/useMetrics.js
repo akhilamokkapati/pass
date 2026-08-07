@@ -228,7 +228,10 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       }
     }
 
-    s.hist.push({ t: snap.t, kneeL: kneeLAngle, kneeR: kneeRAngle, hip: hipTilt, loadL, loadR })
+    s.hist.push({
+      t: snap.t, kneeL: kneeLAngle, kneeR: kneeRAngle, hip: hipTilt, loadL, loadR,
+      actuationTension: actuationOk ? actuation.tension_n : null,
+    })
     if (s.hist.length > SESSION_MAX) s.hist.shift()
 
     setM({

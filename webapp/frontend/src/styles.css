@@ -158,6 +158,11 @@ body {
 .act-level { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-bottom: 14px; }
 .act-level span { color: var(--muted); font-size: 13px; font-weight: 600; }
 .act-level input[type="range"] { width: 100%; accent-color: #c77bf0; }
+.act-kg-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.act-kg-btn { flex: 1 1 calc(33% - 8px); margin-top: 0; padding: 8px 6px; font-size: 13px; }
+.act-kg-btn.on { background: linear-gradient(90deg, #7b3fd6, #c77bf0); color: #fff; border-color: transparent; }
+.act-consistency { font-size: 13px; color: var(--muted); margin-top: 8px; font-weight: 600; }
+.act-consistency.good { color: #3ddc84; }
 .act-countdown { font-size: 64px; font-weight: 800; color: #c77bf0; margin: 10px 0; }
 .act-session .btn { margin-top: 4px; }
 .act-summary { width: 100%; text-align: left; font-size: 14px; color: var(--text); line-height: 1.9; }
@@ -167,10 +172,11 @@ body {
 .act-jog { display: flex; gap: 10px; width: 100%; }
 .act-jog .btn { flex: 1; margin-top: 4px; user-select: none; }
 .act-force-stop {
-  grid-column: 1 / -1; border-color: #7a2330; color: #ff8a94; background: #2a1116;
+  grid-column: 1 / -1; border-color: #b0202f; color: #fff; background: #c0293b;
   font-weight: 700; letter-spacing: .3px;
 }
-.act-force-stop:active { background: #3a161c; }
+.act-force-stop:hover { background: #d43649; }
+.act-force-stop:active { background: #9e1f2d; }
 
 .ring { display: block; margin: 8px 0 2px; filter: drop-shadow(0 4px 12px #0004); }
 .ring-val { font-size: 54px; font-weight: 800; fill: var(--text); }
@@ -223,6 +229,8 @@ body {
 .gait-canvas-wrap { position: relative; height: 70vh; min-height: 420px; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 12px 36px #0008; }
 .gait-canvas-wrap canvas { display: block; }
 .gait-hint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: var(--muted); font-size: 13px; background: #0009; padding: 8px 14px; border-radius: 999px; pointer-events: none; }
+.gait-centre { position: absolute; top: 14px; right: 14px; border: 1px solid var(--line); background: #0009; color: var(--text); font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px; cursor: pointer; }
+.gait-centre:hover { background: #000c; }
 
 /* ---- feet ---- */
 .feet-card { margin-top: 12px; }

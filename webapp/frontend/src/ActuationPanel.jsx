@@ -14,10 +14,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { StatusPill } from './ui.jsx'
+import TimeChart from './TimeChart.jsx'
 
 const COUNTDOWN_S = 3
 const JOG_REPEAT_MS = 150
 const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
+// Preset force-level buttons (kg) replacing the old 0-100 slider. Sent to the
+// board as-is (raw kg), matching set_force/twist's existing unit convention -
+// tension_n already reads on this same scale, not true SI Newtons.
+const KG_OPTIONS = [2, 4, 6, 8, 10, 12]
 
 async function sendCmd(cmd, value = 0) {
   try {
@@ -33,10 +38,10 @@ function downloadSummary(summary) {
   const lines = [
     'PASS actuation session report',
     new Date().toString(),
-    `Target level: ${summary.target}%`,
+    `Target level: ${summary.target} kg`,
     `Duration: ${summary.durationS.toFixed(1)} s`,
-    `Peak tension: ${summary.peak.toFixed(1)} N`,
-    `Avg tension: ${summary.avg.toFixed(1)} N`,
+    `Peak tension: ${summary.peak.toFixed(1)} kg`,
+    `Avg tension: ${summary.avg.toFixed(1)} kg`,
     `Samples: ${summary.samples}`,
   ]
   const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' })
@@ -55,7 +60,7 @@ export default function ActuationPanel({ m }) {
   const tension = m?.actuationTension ?? 0
   const boardState = m?.actuationState ?? null
 
-  const [level, setLevel] = useState(30)
+  const [level, setLevel] = useState(KG_OPTIONS[0])
   const [phase, setPhase] = useState('idle') // idle | countdown | twisting | ready | exercising | summary
   const [countdown, setCountdown] = useState(COUNTDOWN_S)
   const [summary, setSummary] = useState(null)
@@ -129,12 +134,32 @@ export default function ActuationPanel({ m }) {
     sendCmd('stop', 0)
   }
 
+  // Target-vs-actual consistency (supposed force vs what the strain gauge
+  // reports) - only meaningful once a session has actually commanded a
+  // target; before that there's nothing to be consistent WITH.
+  const hasTarget = ['twisting', 'ready', 'exercising'].includes(phase) && session.current.target > 0
+  const target = session.current.target
+  const deltaPct = hasTarget && target > 0 ? ((tension - target) / target) * 100 : null
+
+  const chartData = (m?.hist || []).map((h) => ({
+    ...h,
+    actuationTarget: hasTarget ? target : null,
+  }))
+
   return (
     <div className="grid actuation">
       <div className={`card center accent-actuation ${online ? '' : 'off'}`}>
         <div className="card-head"><h3>Actuation</h3><StatusPill ok={online} /></div>
-        <div className="act-tension">{online ? tension.toFixed(1) : '--'}<span> N</span></div>
+        <div className="act-tension">{online ? tension.toFixed(1) : '--'}<span> kg</span></div>
         <div className="cue">{online ? `board state: ${boardState}` : 'Waiting for board'}</div>
+        {hasTarget && (
+          <div className={`act-consistency ${Math.abs(deltaPct) <= 5 ? 'good' : ''}`}>
+            Target {target} kg · Actual {tension.toFixed(1)} kg · Δ {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%
+          </div>
+        )}
+        <TimeChart data={chartData}
+          series={[{ key: 'actuationTension', color: '#c77bf0' }, { key: 'actuationTarget', color: '#4ea1ff' }]}
+          unit=" kg" windowS={25} />
       </div>
 
       <div className="card center accent-actuation act-session">
@@ -143,9 +168,15 @@ export default function ActuationPanel({ m }) {
         {phase === 'idle' && (
           <>
             <label className="act-level">
-              <span>Force level: {level}%</span>
-              <input type="range" min="0" max="100" value={level}
-                onChange={(e) => setLevel(Number(e.target.value))} />
+              <span>Force level: {level} kg</span>
+              <div className="act-kg-row">
+                {KG_OPTIONS.map((kg) => (
+                  <button key={kg} type="button" className={`btn ghost act-kg-btn ${level === kg ? 'on' : ''}`}
+                    onClick={() => setLevel(kg)}>
+                    {kg} kg
+                  </button>
+                ))}
+              </div>
             </label>
             <button className="btn download" onClick={startSession} disabled={!online}>
               Start session
@@ -160,8 +191,8 @@ export default function ActuationPanel({ m }) {
 
         {phase === 'twisting' && (
           <>
-            <div className="cue">Twisting to {level}%…</div>
-            <div className="act-tension small">{tension.toFixed(1)} / {level} N</div>
+            <div className="cue">Twisting to {level} kg…</div>
+            <div className="act-tension small">{tension.toFixed(1)} / {level} kg</div>
             <button className="btn ghost" onClick={markReady}>Mark ready</button>
           </>
         )}
@@ -176,7 +207,7 @@ export default function ActuationPanel({ m }) {
         {phase === 'exercising' && (
           <>
             <div className="cue good">Exercise in progress</div>
-            <div className="act-tension small">{tension.toFixed(1)} N</div>
+            <div className="act-tension small">{tension.toFixed(1)} kg</div>
             <button className="btn ghost" onClick={stopSession}>Stop</button>
           </>
         )}
@@ -184,10 +215,10 @@ export default function ActuationPanel({ m }) {
         {phase === 'summary' && summary && (
           <div className="act-summary">
             <div className="act-summary-title">Session complete</div>
-            <div>Target: {summary.target}%</div>
+            <div>Target: {summary.target} kg</div>
             <div>Duration: {summary.durationS.toFixed(1)} s</div>
-            <div>Peak tension: {summary.peak.toFixed(1)} N</div>
-            <div>Avg tension: {summary.avg.toFixed(1)} N</div>
+            <div>Peak tension: {summary.peak.toFixed(1)} kg</div>
+            <div>Avg tension: {summary.avg.toFixed(1)} kg</div>
             <div className="act-summary-actions">
               <button className="btn ghost" onClick={() => downloadSummary(summary)}>Download report</button>
               <button className="btn download" onClick={() => setPhase('idle')}>New session</button>
