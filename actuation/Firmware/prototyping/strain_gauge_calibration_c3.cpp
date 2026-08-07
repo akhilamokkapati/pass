@@ -1,4 +1,8 @@
-// HX711 multi-point calibration, XIAO ESP32-S3.
+// HX711 multi-point calibration, XIAO ESP32-C3.
+// Duplicate of strain_gauge_calibration.cpp (S3) for the C3 board on COM14 -
+// this calibrates that board's own physical gauge, it does not transfer to
+// the S3 rig's gauges.
+//
 // Replaces the old single-weight nudge-to-match procedure with a proper
 // least-squares fit across several known weights - averaging individual
 // per-weight ratios lets noisy light-weight readings skew the result as
