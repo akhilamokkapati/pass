@@ -34,10 +34,15 @@ export default function App() {
   // which dashboard someone sees is decided by how they logged in.
   const [tab, setTab] = useState('home')
   const anyLive = !!m?.anyLive
+  // Bumped on every "Zero feet" click so FeetMap's own per-channel baseline
+  // (a separate tracker from useMetrics.js's) resets in lockstep instead of
+  // silently drifting apart from the balance bar's zero point.
+  const [feetZeroEpoch, setFeetZeroEpoch] = useState(0)
 
   if (!session) return <LoginView onAuth={setSession} />
 
   const handleLogout = () => { logOut(); setSession(null); setTab('home') }
+  const handleZeroFeet = () => { zeroFeet(); setFeetZeroEpoch((e) => e + 1) }
 
   return (
     <div className="app">
@@ -80,14 +85,14 @@ export default function App() {
         </div>
       )}
 
-      {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} />}
+      {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} />}
       {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} />}
       {tab === 'gait' && <GaitView m={m} />}
       {tab === 'session' && <ActuationPanel m={m} />}
 
       <div className="actions">
         <button className="btn ghost" onClick={zeroHip}>Zero hip (stand tall)</button>
-        <button className="btn ghost" onClick={zeroFeet}>Zero feet (lift both off insoles)</button>
+        <button className="btn ghost" onClick={handleZeroFeet}>Zero feet (lift both off insoles)</button>
         <button className="btn ghost" onClick={calibrateBalance}>Calibrate balance (stand evenly)</button>
         <button className="btn ghost" onClick={resetReps}>Reset reps</button>
         <button className={`btn ghost ${m?.calPhase === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKnees}>

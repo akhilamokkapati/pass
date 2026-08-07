@@ -25,10 +25,21 @@ function pressureColor(t) {
   return `rgb(${r},${g},${b})`
 }
 
-function Foot({ side, zones, data, fullScale }) {
+function Foot({ side, zones, data, fullScale, resetKey }) {
   const ok = data && data.age != null && data.age < STALE
   const c = data?.c || []
   const baseRef = useRef({})
+  const wasOkRef = useRef(false)
+  const lastResetRef = useRef(resetKey)
+  // Same "auto-reset on reconnect" fix useMetrics.js already has for its own
+  // baseline - without it, a channel's zero point gets set once from whatever
+  // the first sample after mount happened to be (which may not be true zero
+  // load) and never corrects itself for the rest of the session. Also clears
+  // on the shared "Zero feet" click (resetKey bump from App.jsx) so this map
+  // and the balance bar agree on one zero point instead of drifting apart.
+  if (ok && !wasOkRef.current) baseRef.current = {}
+  wasOkRef.current = ok
+  if (resetKey !== lastResetRef.current) { baseRef.current = {}; lastResetRef.current = resetKey }
   const W = 150, H = 210
   const mirror = side === 'right' ? `translate(${W},0) scale(-1,1)` : undefined
   let total = 0
@@ -60,7 +71,7 @@ function Foot({ side, zones, data, fullScale }) {
   )
 }
 
-export default function FeetMap({ feet }) {
+export default function FeetMap({ feet, resetKey }) {
   const [layout, setLayout] = useState(null)
   const [fullScale, setFullScale] = useState(() => {
     const saved = Number(localStorage.getItem(SENS_KEY))
@@ -78,8 +89,8 @@ export default function FeetMap({ feet }) {
     <div className="feet-card">
       {layout ? (
         <div className="feet-row">
-          <Foot side="left" zones={layout.left} data={feet?.left} fullScale={fullScale} />
-          <Foot side="right" zones={layout.right} data={feet?.right} fullScale={fullScale} />
+          <Foot side="left" zones={layout.left} data={feet?.left} fullScale={fullScale} resetKey={resetKey} />
+          <Foot side="right" zones={layout.right} data={feet?.right} fullScale={fullScale} resetKey={resetKey} />
         </div>
       ) : (
         <div className="sub">loading layout...</div>

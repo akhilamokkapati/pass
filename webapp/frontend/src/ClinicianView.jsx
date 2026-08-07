@@ -27,7 +27,7 @@ function kneeSideStats(hist, key) {
   return { romMax, rom, vel }
 }
 
-export default function ClinicianView({ m, snap }) {
+export default function ClinicianView({ m, snap, feetZeroEpoch }) {
   const hist = m?.hist || []
   const left = kneeSideStats(hist, 'kneeL')
   const right = kneeSideStats(hist, 'kneeR')
@@ -102,7 +102,7 @@ export default function ClinicianView({ m, snap }) {
           <Stat label="L / R split" value={sym == null ? '--' : `${sym}/${100 - sym}`} unit="%" />
           <Stat label="feet" value={feetOk ? 'connected' : 'not conn.'} unit="" />
         </div>
-        <FeetMap feet={snap?.feet} />
+        <FeetMap feet={snap?.feet} resetKey={feetZeroEpoch} />
       </section>
     </div>
   )
