@@ -33,7 +33,7 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
   const right = kneeSideStats(hist, 'kneeR')
   const hipMax = hist.reduce((mx, h) => (h.hip != null ? Math.max(mx, h.hip) : mx), 0)
   const total = (m?.loadL || 0) + (m?.loadR || 0)
-  const sym = total > 60 ? Math.round((m.loadL / total) * 100) : null
+  const sym = (!m?.feetSettling && total > 60) ? Math.round((m.loadL / total) * 100) : null
   const fmt = (v, d = 0) => (v == null ? '--' : v.toFixed(d))
 
   const kneeLOk = !!m?.kneeLOk
@@ -93,9 +93,6 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
           <h3>Foot loading and symmetry</h3>
           <span className="legend-inline"><i className="dot blue" /> left <i className="dot orange" /> right</span>
         </div>
-        {m?.feetNeedsZero && (
-          <div className="zero-warn">Reconnected - click "Zero feet" before trusting these readings</div>
-        )}
         <TimeChart data={hist}
           series={[{ key: 'loadL', color: '#4ea1ff' }, { key: 'loadR', color: '#f6774b' }]}
           windowS={25} />

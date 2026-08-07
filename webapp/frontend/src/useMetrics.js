@@ -12,6 +12,11 @@ const CAL_BUF_MAX = 12       // ~0.5-0.6s of samples at 20Hz to average per capt
 const MIN_BEND_DEG = 15      // reject a calibration bend this small or smaller
 const SESSION_MAX = 108000   // ~90min at 20Hz - keep the full session for CSV export,
                               // not just the ~45s the live charts need
+const FEET_SETTLE_S = 2      // after a foot reconnects, the baseline hasn't yet seen a
+                              // genuine no-load sample to lock onto - it self-corrects the
+                              // moment it does (running min), so briefly hide the balance
+                              // number instead of showing a skewed one or asking the user
+                              // to do anything about it (same idea as a scale settling)
 
 // Heel-strike/toe-off from the feet FSRs: no ankle IMU exists, so this reads
 // contact PHASE (foot down vs foot lifted) from the heel-specific channels
@@ -69,12 +74,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // reading's scale, captured once via calibrateBalance() while standing
     // evenly (assumed 50/50 - the only reference this software has).
     balScaleR: 1, lastLoadL: null, lastLoadR: null, calMsgBalance: '',
-    // Set whenever a foot's baseline auto-resets from a reconnect (see below) -
-    // stays true, with no other indication anywhere in the UI, until the user
-    // explicitly re-zeros. Surfaced so a mid-session reconnect (WiFi hiccup,
-    // board power-cycle) doesn't silently produce a skewed balance reading
-    // that looks like real data.
-    feetNeedsZero: false,
+    feetSettleUntilT: null,
   })
   const [m, setM] = useState(null)
 
@@ -102,8 +102,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // then on. Resetting on reconnect means a board coming back up (which
     // happens a lot over hours of testing/power-cycling) gets a clean floor
     // instead of inheriting hours of accumulated drift.
-    if (lOk && !s.lWasOk) { s.baseL = {}; s.feetNeedsZero = true }
-    if (rOk && !s.rWasOk) { s.baseR = {}; s.feetNeedsZero = true }
+    if (lOk && !s.lWasOk) { s.baseL = {}; s.feetSettleUntilT = snap.t + FEET_SETTLE_S }
+    if (rOk && !s.rWasOk) { s.baseR = {}; s.feetSettleUntilT = snap.t + FEET_SETTLE_S }
     s.lWasOk = lOk
     s.rWasOk = rOk
 
@@ -242,7 +242,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
 
     setM({
       kneeLAngle, kneeLOk, kneeRAngle, kneeROk, hipTilt, hipOk,
-      loadL, loadR, lOk, rOk, feetNeedsZero: s.feetNeedsZero,
+      loadL, loadR, lOk, rOk,
+      feetSettling: s.feetSettleUntilT != null && snap.t < s.feetSettleUntilT,
       footPhaseL: lOk ? s.footPhaseL : null, footPhaseR: rOk ? s.footPhaseR : null,
       repsL: s.repsL, repsR: s.repsR, hist: s.hist,
       formFlagL: s.formFlagL, formFlagR: s.formFlagR,
@@ -263,7 +264,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   // moment, every reading afterward inherits that skew for the rest of the
   // session with no way to fix it except this. Lift both feet off the
   // insoles before clicking so the next samples become the new floor.
-  const zeroFeet = () => { S.current.baseL = {}; S.current.baseR = {}; S.current.feetNeedsZero = false }
+  const zeroFeet = () => { S.current.baseL = {}; S.current.baseR = {} }
 
   // One-shot fix for the two insoles having different raw sensitivity:
   // capture the L/R ratio while standing evenly and use it to scale the

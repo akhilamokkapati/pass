@@ -187,12 +187,6 @@ body {
 .cue { margin-top: 8px; color: var(--muted); font-size: 14px; min-height: 20px; }
 .cue.good { color: var(--ok); font-weight: 700; }
 .form-flag { margin-top: 6px; color: var(--warn); font-size: 13px; font-weight: 600; }
-.zero-warn {
-  margin-top: 8px; padding: 6px 10px; border-radius: 8px;
-  background: color-mix(in srgb, var(--warn) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-  color: var(--warn); font-size: 12px; font-weight: 600; text-align: center;
-}
 .hip-flex-stat { margin-top: 6px; color: var(--muted); font-size: 13px; }
 
 .btn.ghost.on { color: var(--warn); border-color: #6b5420; background: #241d0f; }

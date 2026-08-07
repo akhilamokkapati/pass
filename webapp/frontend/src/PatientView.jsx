@@ -7,10 +7,11 @@ function Head({ title, ok }) {
 }
 
 function BalanceBar({ m }) {
+  const settling = !!m?.feetSettling
   const total = (m?.loadL || 0) + (m?.loadR || 0)
-  const active = total > 400 && (m?.lOk || m?.rOk)
+  const active = !settling && total > 400 && (m?.lOk || m?.rOk)
   const leftPct = active ? (m.loadL / total) * 100 : 50
-  let cue = 'Step onto the insoles'
+  let cue = settling ? 'Calibrating…' : 'Step onto the insoles'
   if (active) {
     const diff = leftPct - 50
     if (Math.abs(diff) < 8) cue = 'Nicely balanced'
@@ -78,9 +79,6 @@ export default function PatientView({ m, kneeTarget, session }) {
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />
         <BalanceBar m={m} />
-        {m?.feetNeedsZero && (
-          <div className="zero-warn">Reconnected - click "Zero feet" before trusting this reading</div>
-        )}
       </div>
 
       <div className={`card center accent-hip ${hipOk ? '' : 'off'}`}>
