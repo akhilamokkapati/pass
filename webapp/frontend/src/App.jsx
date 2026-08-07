@@ -27,7 +27,7 @@ function useTheme() {
 
 export default function App() {
   const { snap, connected } = useSocket()
-  const { m, zeroHip, zeroFeet, resetReps, calibrateKnees, calibrateHips, calibrateBalance } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
+  const { m, zeroHip, zeroFeet, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateBalance } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
   const [session, setSession] = useState(() => getSession())
   const [theme, setTheme] = useTheme()
   // Own-role view vs the shared Gait tab - not a free-for-all switcher anymore;
@@ -95,14 +95,18 @@ export default function App() {
         <button className="btn ghost" onClick={handleZeroFeet}>Zero feet (lift both off insoles)</button>
         <button className="btn ghost" onClick={calibrateBalance}>Calibrate balance (stand evenly)</button>
         <button className="btn ghost" onClick={resetReps}>Reset reps</button>
-        <button className={`btn ghost ${m?.calPhase === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKnees}>
-          {m?.calPhase === 'awaiting-bent' ? 'Capture bent' : 'Calibrate knees'}
+        <button className={`btn ghost ${m?.calPhaseL === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKneeL}>
+          {m?.calPhaseL === 'awaiting-bent' ? 'Capture left bent' : 'Calibrate left knee'}
+        </button>
+        <button className={`btn ghost ${m?.calPhaseR === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKneeR}>
+          {m?.calPhaseR === 'awaiting-bent' ? 'Capture right bent' : 'Calibrate right knee'}
         </button>
         <button className={`btn ghost ${m?.calPhaseHip === 'awaiting-flexed' ? 'on' : ''}`} onClick={calibrateHips}>
           {m?.calPhaseHip === 'awaiting-flexed' ? 'Capture flexed' : 'Calibrate hip flexion'}
         </button>
       </div>
-      {m?.calMsg && <div className="cal-msg center-msg">{m.calMsg}</div>}
+      {m?.calMsgL && <div className="cal-msg center-msg">{m.calMsgL}</div>}
+      {m?.calMsgR && <div className="cal-msg center-msg">{m.calMsgR}</div>}
       {m?.calMsgHip && <div className="cal-msg center-msg">{m.calMsgHip}</div>}
       {m?.calMsgBalance && <div className="cal-msg center-msg">{m.calMsgBalance}</div>}
 

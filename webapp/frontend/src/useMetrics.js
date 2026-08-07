@@ -47,12 +47,12 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // knee flexion calibration: rolling raw-quaternion buffers feed capture
     // clicks; calL/calR (once set) hold {qNeutral, axis} and switch the angle
     // computation from the firmware's rough cross-check to real swing-twist.
-    // One shared phase/button drives both sides at once (typical use: both
-    // knees worn together), but each side's neutral/axis is captured and
-    // judged independently, since a sleeve on one leg tells you nothing about
-    // the other.
+    // Separate phase/button per side - a patient calibrating solo can't hold
+    // a controlled bend on both legs at once, and one knee's capture
+    // shouldn't be blocked on the other leg being mid-flow.
     bufL: [], bufR: [], calL: null, calR: null,
-    calPhase: 'idle', calCaptureL: null, calCaptureR: null, calMsg: '',
+    calPhaseL: 'idle', calCaptureL: null, calMsgL: '',
+    calPhaseR: 'idle', calCaptureR: null, calMsgR: '',
     // hip flexion calibration: same swing-twist idea, but relates the pelvis
     // sensor to each knee board's OWN thigh sensor (already worn for the knee
     // metric - no new hardware) instead of thigh-to-shank. Separate buffers
@@ -254,7 +254,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       actuationState: actuationOk ? actuation.state : null,
       anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
       calibratedL: !!s.calL, calibratedR: !!s.calR,
-      calPhase: s.calPhase, calMsg: s.calMsg,
+      calPhaseL: s.calPhaseL, calMsgL: s.calMsgL,
+      calPhaseR: s.calPhaseR, calMsgR: s.calMsgR,
     })
   }, [snap?.t, kneeTarget])
 
@@ -291,63 +292,56 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.formFlagL = ''; s.formFlagR = ''
   }
 
-  // One button drives both knees through the same two-click flow, mirroring
-  // axis_calibration.py: first click captures a short averaged window of the
-  // current (assumed straight) pose as neutral for every side that's live,
-  // second click captures a bent pose and derives each side's real flexion
-  // axis from the rotation between them. Each side is judged independently -
-  // one knee's bad capture doesn't discard the other's good one.
-  const calibrateKnees = () => {
+  // Independent two-click flow per knee, mirroring axis_calibration.py: first
+  // click captures a short averaged window of the current (assumed straight)
+  // pose as neutral, second click captures a bent pose and derives that
+  // side's real flexion axis from the rotation between them. Split per side
+  // (rather than one button driving both) because a patient calibrating
+  // solo can't hold a controlled, deliberate bend on both legs
+  // simultaneously - each leg gets its own capture, in its own time.
+  const calibrateKneeSide = (side) => {
     const s = S.current
-    const sides = [
-      { key: 'left', buf: s.bufL, captureKey: 'calCaptureL', calKey: 'calL' },
-      { key: 'right', buf: s.bufR, captureKey: 'calCaptureR', calKey: 'calR' },
-    ].filter((side) => side.buf.length >= 3)
+    const buf = side === 'left' ? s.bufL : s.bufR
+    const captureKey = side === 'left' ? 'calCaptureL' : 'calCaptureR'
+    const calKey = side === 'left' ? 'calL' : 'calR'
+    const phaseKey = side === 'left' ? 'calPhaseL' : 'calPhaseR'
+    const msgKey = side === 'left' ? 'calMsgL' : 'calMsgR'
 
-    if (!sides.length) {
-      s.calMsg = 'Waiting for sensor data - try again in a moment'
+    if (buf.length < 3) {
+      s[msgKey] = 'Waiting for sensor data - try again in a moment'
       return
     }
 
-    if (s.calPhase === 'idle') {
-      for (const side of sides) {
-        s[side.captureKey] = {
-          qt: qaverage(side.buf.map((b) => b.qt)),
-          qs: qaverage(side.buf.map((b) => b.qs)),
-        }
-      }
-      s.calPhase = 'awaiting-bent'
-      s.calMsg = 'Now bend the knee(s) ~30-60° and hold still, then click again'
+    if (s[phaseKey] === 'idle') {
+      s[captureKey] = { qt: qaverage(buf.map((b) => b.qt)), qs: qaverage(buf.map((b) => b.qs)) }
+      s[phaseKey] = 'awaiting-bent'
+      s[msgKey] = 'Now bend the knee ~30-60° and hold still, then click again'
       return
     }
 
-    const results = []
-    for (const side of sides) {
-      const straight = s[side.captureKey]
-      if (!straight) continue   // wasn't live for the straight capture
-      const capture = {
-        qt: qaverage(side.buf.map((b) => b.qt)),
-        qs: qaverage(side.buf.map((b) => b.qs)),
-      }
-      const qNeutral = qrelative(straight.qt, straight.qs)
-      const qBentRel = qrelative(capture.qt, capture.qs)
-      const qOffset = qrelative(qNeutral, qBentRel)
-      const { axis, angleDeg } = axisAngle(qcanon(qOffset))
-      if (angleDeg < MIN_BEND_DEG) {
-        results.push(`${side.key}: bend too small`)
-        continue
-      }
-      s[side.calKey] = { qNeutral, axis }
-      results.push(`${side.key}: calibrated`)
+    const straight = s[captureKey]
+    s[phaseKey] = 'idle'
+    s[captureKey] = null
+    if (!straight) {   // wasn't live for the straight capture
+      s[msgKey] = 'Sensor dropped mid-capture - try again'
+      return
     }
-
-    s.calPhase = 'idle'
-    s.calCaptureL = null
-    s.calCaptureR = null
-    s.calMsg = results.length ? results.join(', ') : 'Bend too small - hold each pose still and try again'
+    const capture = { qt: qaverage(buf.map((b) => b.qt)), qs: qaverage(buf.map((b) => b.qs)) }
+    const qNeutral = qrelative(straight.qt, straight.qs)
+    const qBentRel = qrelative(capture.qt, capture.qs)
+    const qOffset = qrelative(qNeutral, qBentRel)
+    const { axis, angleDeg } = axisAngle(qcanon(qOffset))
+    if (angleDeg < MIN_BEND_DEG) {
+      s[msgKey] = 'Bend too small - hold each pose still and try again'
+      return
+    }
+    s[calKey] = { qNeutral, axis }
+    s[msgKey] = 'Calibrated'
   }
+  const calibrateKneeL = () => calibrateKneeSide('left')
+  const calibrateKneeR = () => calibrateKneeSide('right')
 
-  // Same two-click flow as calibrateKnees, but relating the pelvis sensor to
+  // Same two-click flow as calibrateKneeSide, but relating the pelvis sensor to
   // each knee board's thigh sensor instead of thigh-to-shank - gives real hip
   // flexion (pelvis-to-thigh angle), not just the pelvis's own tilt-from-level.
   // Needs a genuine flexion move (raise the thigh/knee forward), not a knee
@@ -403,5 +397,5 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.calMsgHip = results.length ? results.join(', ') : 'Movement too small - hold each pose still and try again'
   }
 
-  return { m, zeroHip, zeroFeet, resetReps, calibrateKnees, calibrateHips, calibrateBalance }
+  return { m, zeroHip, zeroFeet, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateBalance }
 }
