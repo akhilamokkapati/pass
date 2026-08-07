@@ -78,6 +78,9 @@ export default function PatientView({ m, kneeTarget, session }) {
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />
         <BalanceBar m={m} />
+        {m?.feetNeedsZero && (
+          <div className="zero-warn">Reconnected - click "Zero feet" before trusting this reading</div>
+        )}
       </div>
 
       <div className={`card center accent-hip ${hipOk ? '' : 'off'}`}>

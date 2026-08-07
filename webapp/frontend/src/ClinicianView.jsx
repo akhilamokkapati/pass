@@ -93,6 +93,9 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
           <h3>Foot loading and symmetry</h3>
           <span className="legend-inline"><i className="dot blue" /> left <i className="dot orange" /> right</span>
         </div>
+        {m?.feetNeedsZero && (
+          <div className="zero-warn">Reconnected - click "Zero feet" before trusting these readings</div>
+        )}
         <TimeChart data={hist}
           series={[{ key: 'loadL', color: '#4ea1ff' }, { key: 'loadR', color: '#f6774b' }]}
           windowS={25} />

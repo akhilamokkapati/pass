@@ -69,6 +69,12 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // reading's scale, captured once via calibrateBalance() while standing
     // evenly (assumed 50/50 - the only reference this software has).
     balScaleR: 1, lastLoadL: null, lastLoadR: null, calMsgBalance: '',
+    // Set whenever a foot's baseline auto-resets from a reconnect (see below) -
+    // stays true, with no other indication anywhere in the UI, until the user
+    // explicitly re-zeros. Surfaced so a mid-session reconnect (WiFi hiccup,
+    // board power-cycle) doesn't silently produce a skewed balance reading
+    // that looks like real data.
+    feetNeedsZero: false,
   })
   const [m, setM] = useState(null)
 
@@ -96,8 +102,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // then on. Resetting on reconnect means a board coming back up (which
     // happens a lot over hours of testing/power-cycling) gets a clean floor
     // instead of inheriting hours of accumulated drift.
-    if (lOk && !s.lWasOk) s.baseL = {}
-    if (rOk && !s.rWasOk) s.baseR = {}
+    if (lOk && !s.lWasOk) { s.baseL = {}; s.feetNeedsZero = true }
+    if (rOk && !s.rWasOk) { s.baseR = {}; s.feetNeedsZero = true }
     s.lWasOk = lOk
     s.rWasOk = rOk
 
@@ -236,7 +242,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
 
     setM({
       kneeLAngle, kneeLOk, kneeRAngle, kneeROk, hipTilt, hipOk,
-      loadL, loadR, lOk, rOk,
+      loadL, loadR, lOk, rOk, feetNeedsZero: s.feetNeedsZero,
       footPhaseL: lOk ? s.footPhaseL : null, footPhaseR: rOk ? s.footPhaseR : null,
       repsL: s.repsL, repsR: s.repsR, hist: s.hist,
       formFlagL: s.formFlagL, formFlagR: s.formFlagR,
@@ -257,7 +263,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
   // moment, every reading afterward inherits that skew for the rest of the
   // session with no way to fix it except this. Lift both feet off the
   // insoles before clicking so the next samples become the new floor.
-  const zeroFeet = () => { S.current.baseL = {}; S.current.baseR = {} }
+  const zeroFeet = () => { S.current.baseL = {}; S.current.baseR = {}; S.current.feetNeedsZero = false }
 
   // One-shot fix for the two insoles having different raw sensitivity:
   // capture the L/R ratio while standing evenly and use it to scale the
