@@ -13,6 +13,8 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 // each loaded skeleton's actual bone names rather than assuming.
 const BONE = {
   hips: ['mixamorigHips', 'mixamorig:Hips'],
+  leftHip: ['mixamorigLeftUpLeg', 'mixamorig:LeftUpLeg'],
+  rightHip: ['mixamorigRightUpLeg', 'mixamorig:RightUpLeg'],
   leftKnee: ['mixamorigLeftLeg', 'mixamorig:LeftLeg'],
   rightKnee: ['mixamorigRightLeg', 'mixamorig:RightLeg'],
   leftFoot: ['mixamorigLeftFoot', 'mixamorig:LeftFoot'],
@@ -24,6 +26,15 @@ const BONE = {
 // guess baked in from a generic Mixamo doc - rigs vary axis/sign).
 const KNEE_AXIS = new THREE.Vector3(1, 0, 0)
 const KNEE_SIGN = 1
+
+// Same idea as KNEE_AXIS/KNEE_SIGN, for the thigh (UpLeg) bone driven by
+// hipFlexL/R. Starting guess matches the knee's convention (both are
+// sagittal-plane hinges), but this has NOT been visually verified against a
+// live calibrated hip-flexion reading yet the way the knee axis was - if the
+// thigh swings the wrong way (or backwards) once this is live, flip
+// HIP_FLEX_SIGN to -1 first before touching the axis itself.
+const HIP_FLEX_AXIS = new THREE.Vector3(1, 0, 0)
+const HIP_FLEX_SIGN = 1
 
 // There's no ankle IMU, so the foot has no measured angle - only a contact
 // PHASE from the feet FSRs (useMetrics: footPhaseL/R, derived from the
@@ -37,7 +48,7 @@ const FOOT_EASE_PER_SEC = 10
 // Shared rig-driving logic for any loaded skeleton, regardless of which
 // loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
 // bone graph, so this doesn't need to know which one loaded `root`).
-function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, footPhaseL, footPhaseR }) {
+function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFlexRDeg, footPhaseL, footPhaseR }) {
   const bones = useRef({})
   const restQuat = useRef({})
   const footAngle = useRef({ left: 0, right: 0 })
@@ -72,6 +83,16 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, footPhaseL, footPh
       const tilt = THREE.MathUtils.degToRad(Math.min(30, hipTiltDeg))
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt)
       b.hips.quaternion.copy(rest.hips).multiply(q)
+    }
+    if (b.leftHip && rest.leftHip) {
+      const flex = THREE.MathUtils.degToRad(Math.max(0, hipFlexLDeg ?? 0)) * HIP_FLEX_SIGN
+      const q = new THREE.Quaternion().setFromAxisAngle(HIP_FLEX_AXIS, flex)
+      b.leftHip.quaternion.copy(rest.leftHip).multiply(q)
+    }
+    if (b.rightHip && rest.rightHip) {
+      const flex = THREE.MathUtils.degToRad(Math.max(0, hipFlexRDeg ?? 0)) * HIP_FLEX_SIGN
+      const q = new THREE.Quaternion().setFromAxisAngle(HIP_FLEX_AXIS, flex)
+      b.rightHip.quaternion.copy(rest.rightHip).multiply(q)
     }
 
     const ease = 1 - Math.exp(-FOOT_EASE_PER_SEC * delta)
