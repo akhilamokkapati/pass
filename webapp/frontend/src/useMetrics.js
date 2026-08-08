@@ -25,6 +25,12 @@ const FEET_SETTLE_S = 2      // after a foot reconnects, the baseline hasn't yet
 // release) avoids chatter right at the threshold.
 const HEEL_STANCE_ON = 150   // heel load above this -> stance (foot down)
 const HEEL_STANCE_OFF = 50   // heel load below this -> swing (foot lifted)
+// Third state, same idea: heel loaded but TOES unloaded means the foot is
+// still down but rocked back onto the heel (toes deliberately lifted), not
+// mid-swing (heel unloaded/foot off the ground). Own hysteresis band so it
+// doesn't chatter against 'stance' right at the threshold, same as heel's.
+const TOE_LOAD_ON = 150      // toe load above this -> flat/stance
+const TOE_LOAD_OFF = 50      // toe load below this -> heel-only
 
 // Per-rep form checks, evaluated once a rep completes. Thresholds follow the
 // same "error tolerance" idea used in knee-OA rehab literature (e.g. Chen et
@@ -63,7 +69,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // combined metric (e.g. balance needing both feet).
     bufHipL: [], bufHipR: [], calHipL: null, calHipR: null,
     calPhaseHip: 'idle', calCaptureHipL: null, calCaptureHipR: null, calMsgHip: '',
-    footLayout: null, heelBaseL: {}, heelBaseR: {},
+    footLayout: null, heelBaseL: {}, heelBaseR: {}, toeBaseL: {}, toeBaseR: {},
     footPhaseL: 'stance', footPhaseR: 'stance',
     repPeakL: 0, repPeakHipL: 0, repStartTL: null, formFlagL: '',
     repPeakR: 0, repPeakHipR: 0, repStartTR: null, formFlagR: '',
@@ -132,30 +138,40 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.lastLoadL = lOk ? loadL : null
     s.lastLoadR = rOk ? loadRraw : null
 
-    // Heel-specific load (subset of channels, not the whole-foot total) drives
-    // stance/swing phase for the gait avatar's feet.
-    const heelLoad = (side, arr, base) => {
+    // Heel/toe-specific load (subset of channels, not the whole-foot total)
+    // drives stance/swing/heel-only phase for the gait avatar's feet.
+    const zoneLoad = (side, arr, base, anatomy) => {
       const zones = s.footLayout?.[side]
       if (!arr || !zones) return null
       let sum = 0
       for (const [ch, z] of Object.entries(zones)) {
-        if (z.anatomy !== 'heel') continue
+        if (z.anatomy !== anatomy) continue
         const v = arr[Number(ch)] ?? 0
         base[ch] = base[ch] == null ? v : Math.min(base[ch], v)
         sum += Math.max(0, v - base[ch])
       }
       return sum
     }
-    const heelL = lOk ? heelLoad('left', feet.left.c, s.heelBaseL) : null
-    const heelR = rOk ? heelLoad('right', feet.right.c, s.heelBaseR) : null
-    if (heelL != null) {
-      if (s.footPhaseL === 'swing' && heelL > HEEL_STANCE_ON) s.footPhaseL = 'stance'
-      else if (s.footPhaseL === 'stance' && heelL < HEEL_STANCE_OFF) s.footPhaseL = 'swing'
+    const heelL = lOk ? zoneLoad('left', feet.left.c, s.heelBaseL, 'heel') : null
+    const heelR = rOk ? zoneLoad('right', feet.right.c, s.heelBaseR, 'heel') : null
+    const toeL = lOk ? zoneLoad('left', feet.left.c, s.toeBaseL, 'toe') : null
+    const toeR = rOk ? zoneLoad('right', feet.right.c, s.toeBaseR, 'toe') : null
+
+    // Heel unloading always wins (foot coming off the ground entirely, mid-
+    // swing) regardless of toe state. Among heel-loaded states, toe load
+    // decides flat stance vs. rocked back on the heel only.
+    const nextFootPhase = (phase, heel, toe) => {
+      if (heel == null) return phase
+      if (phase !== 'swing' && heel < HEEL_STANCE_OFF) return 'swing'
+      if (phase === 'swing' && heel > HEEL_STANCE_ON) {
+        return (toe != null && toe < TOE_LOAD_OFF) ? 'heel-only' : 'stance'
+      }
+      if (phase === 'stance' && toe != null && toe < TOE_LOAD_OFF) return 'heel-only'
+      if (phase === 'heel-only' && toe != null && toe > TOE_LOAD_ON) return 'stance'
+      return phase
     }
-    if (heelR != null) {
-      if (s.footPhaseR === 'swing' && heelR > HEEL_STANCE_ON) s.footPhaseR = 'stance'
-      else if (s.footPhaseR === 'stance' && heelR < HEEL_STANCE_OFF) s.footPhaseR = 'swing'
-    }
+    s.footPhaseL = nextFootPhase(s.footPhaseL, heelL, toeL)
+    s.footPhaseR = nextFootPhase(s.footPhaseR, heelR, toeR)
 
     if (s.hipRef == null && hipOk) s.hipRef = hip.q
     const hipTilt = hipOk && s.hipRef ? tiltDeg(s.hipRef, hip.q) : null

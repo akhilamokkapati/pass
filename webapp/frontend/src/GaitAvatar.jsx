@@ -49,11 +49,16 @@ const TORSO_LEAN_FRACTION = 0.5
 
 // There's no ankle IMU, so the foot has no measured angle - only a contact
 // PHASE from the feet FSRs (useMetrics: footPhaseL/R, derived from the
-// heel-specific channels). This is a bounded visual cue for foot clearance
-// during swing, not a calibrated kinematic reading; it eases toward a target
-// pitch each frame rather than snapping, so it reads as motion, not a glitch.
+// heel/toe-specific channels). This is a bounded visual cue, not a
+// calibrated kinematic reading; it eases toward a target pitch each frame
+// rather than snapping, so it reads as motion, not a glitch. Three phases:
+// 'stance' (flat), 'swing' (heel unloaded - foot lifted, toes up for
+// clearance), 'heel-only' (heel loaded but toes lifted - rocked back onto
+// the heel while the foot stays down) - a bigger toe-up angle than swing so
+// the two are visually distinguishable, not just numerically different.
 const FOOT_AXIS = new THREE.Vector3(1, 0, 0)
 const SWING_TOE_UP_DEG = 18
+const HEEL_ONLY_TOE_UP_DEG = 32
 const FOOT_EASE_PER_SEC = 10
 
 // No arm sensors exist, so this is a static rest-pose correction, not a
@@ -125,7 +130,11 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     }
 
     const ease = 1 - Math.exp(-FOOT_EASE_PER_SEC * delta)
-    const targetDeg = (phase) => (phase === 'swing' ? SWING_TOE_UP_DEG : 0)
+    const targetDeg = (phase) => {
+      if (phase === 'swing') return SWING_TOE_UP_DEG
+      if (phase === 'heel-only') return HEEL_ONLY_TOE_UP_DEG
+      return 0
+    }
     footAngle.current.left += (targetDeg(footPhaseL) - footAngle.current.left) * ease
     footAngle.current.right += (targetDeg(footPhaseR) - footAngle.current.right) * ease
     if (b.leftFoot && rest.leftFoot) {
