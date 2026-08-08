@@ -19,6 +19,8 @@ const BONE = {
   rightKnee: ['mixamorigRightLeg', 'mixamorig:RightLeg'],
   leftFoot: ['mixamorigLeftFoot', 'mixamorig:LeftFoot'],
   rightFoot: ['mixamorigRightFoot', 'mixamorig:RightFoot'],
+  leftArm: ['mixamorigLeftArm', 'mixamorig:LeftArm'],
+  rightArm: ['mixamorigRightArm', 'mixamorig:RightArm'],
 }
 
 // Local axis each bone bends about, in ITS OWN rest-pose local space. Found by
@@ -44,6 +46,16 @@ const HIP_FLEX_SIGN = 1
 const FOOT_AXIS = new THREE.Vector3(1, 0, 0)
 const SWING_TOE_UP_DEG = 18
 const FOOT_EASE_PER_SEC = 10
+
+// No arm sensors exist, so this is a static rest-pose correction, not a
+// measured reading: Mixamo characters load in a T-pose (arms straight out),
+// which reads as broken/robotic on a standing avatar. Rotating each arm bone
+// about its local Z brings it down to the character's side instead. Sign is
+// opposite per side because the rig mirrors the bind pose left/right - like
+// KNEE_AXIS/HIP_FLEX_AXIS, this is a starting guess and may need visual
+// tuning (wrong-looking arm -> flip that side's sign) once seen live.
+const ARM_DOWN_AXIS = new THREE.Vector3(0, 0, 1)
+const ARM_DOWN_DEG = 75
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
 // loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
@@ -106,6 +118,15 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     if (b.rightFoot && rest.rightFoot) {
       const q = new THREE.Quaternion().setFromAxisAngle(FOOT_AXIS, THREE.MathUtils.degToRad(footAngle.current.right))
       b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
+    }
+
+    if (b.leftArm && rest.leftArm) {
+      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(ARM_DOWN_DEG))
+      b.leftArm.quaternion.copy(rest.leftArm).multiply(q)
+    }
+    if (b.rightArm && rest.rightArm) {
+      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(-ARM_DOWN_DEG))
+      b.rightArm.quaternion.copy(rest.rightArm).multiply(q)
     }
   })
 }
