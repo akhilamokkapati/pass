@@ -26,13 +26,13 @@ double measuredAngle = 0;   // theta_o, encoder counts (double copy of `position
 double pidOutput = 0;       // signed PWM the PID *wants* - not what's actually sent to the motor, see setMotor()/appliedPwm
 
 // ---- PID gains - tune here directly ----
-double Kp = 0.05, Ki = 0.0, Kd = 0.0;
+double Kp = 5.0, Ki = 0.0, Kd = 0.5;
 
 PID anglePID(&measuredAngle, &pidOutput, &angleSetpoint, Kp, Ki, Kd, DIRECT);
 
 // ---- Motor drive shaping ----
-const int MIN_DUTY = 100;      // minimum PWM to overcome motor/gearbox static friction - below this the motor doesn't turn at all
-const int MAX_DUTY = 150;      // upper duty limit, unvalidated starting point for this board's motor/driver
+const int MIN_DUTY = 0;       // minimum PWM to overcome motor/gearbox static friction - below this the motor doesn't turn at all
+const int MAX_DUTY = 70;      // upper duty limit, unvalidated starting point for this board's motor/driver
 const int OUTPUT_DEADBAND = 5; // |pidOutput| under this counts as "close enough" - motor fully stops instead of being floored up to MIN_DUTY
 
 volatile long position = 0;
