@@ -27,10 +27,10 @@ export default function GaitView({ m }) {
       </div>
       <div className="gait-canvas-wrap">
         <Canvas camera={{ position: [2.4, 1.4, 2.4], fov: 45 }} shadows>
-          <color attach="background" args={['#0b0e13']} />
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[3, 5, 2]} intensity={1.2} castShadow />
-          <directionalLight position={[-3, 2, -2]} intensity={0.4} />
+          <color attach="background" args={['#dbe2ec']} />
+          <ambientLight intensity={0.8} />
+          <directionalLight position={[3, 5, 2]} intensity={1.1} castShadow />
+          <directionalLight position={[-3, 2, -2]} intensity={0.5} />
           <Suspense fallback={null}>
             <GaitAvatar
               key={modelId}
