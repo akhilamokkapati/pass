@@ -59,11 +59,14 @@ const FOOT_EASE_PER_SEC = 10
 // No arm sensors exist, so this is a static rest-pose correction, not a
 // measured reading: Mixamo characters load in a T-pose (arms straight out),
 // which reads as broken/robotic on a standing avatar. Rotating each arm bone
-// about its local Z brings it down to the character's side instead. Sign is
-// opposite per side because the rig mirrors the bind pose left/right - like
-// KNEE_AXIS/HIP_FLEX_AXIS, this is a starting guess and may need visual
-// tuning (wrong-looking arm -> flip that side's sign) once seen live.
-const ARM_DOWN_AXIS = new THREE.Vector3(0, 0, 1)
+// brings it down to the character's side instead. First attempt used the Z
+// axis and produced NO visible movement - on this rig, X is the confirmed
+// "swing" axis for limb bones (KNEE_AXIS and HIP_FLEX_AXIS both use it, and
+// both are visually verified working), so Z was very likely just twisting
+// the arm around its own length instead of swinging it. Matching that
+// convention here. Sign is opposite per side because the rig mirrors the
+// bind pose left/right.
+const ARM_DOWN_AXIS = new THREE.Vector3(1, 0, 0)
 const ARM_DOWN_DEG = 75
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
