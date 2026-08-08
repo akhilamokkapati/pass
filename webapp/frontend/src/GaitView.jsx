@@ -38,7 +38,7 @@ export default function GaitView({ m }) {
               scale={model.scale}
               kneeLDeg={kneeLOk ? m.kneeLAngle : 0}
               kneeRDeg={kneeROk ? m.kneeRAngle : 0}
-              hipTiltDeg={m?.hipOk ? m.hipTilt : 0}
+              hipTiltDeg={(m?.hipOk && m?.hipTiltCalibrated) ? m.hipTiltSigned : 0}
               hipFlexLDeg={m?.hipFlexCalibratedL ? m.hipFlexL : 0}
               hipFlexRDeg={m?.hipFlexCalibratedR ? m.hipFlexR : 0}
               footPhaseL={m?.footPhaseL}

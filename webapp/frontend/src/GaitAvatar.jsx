@@ -13,6 +13,7 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 // each loaded skeleton's actual bone names rather than assuming.
 const BONE = {
   hips: ['mixamorigHips', 'mixamorig:Hips'],
+  spine: ['mixamorigSpine', 'mixamorig:Spine'],
   leftHip: ['mixamorigLeftUpLeg', 'mixamorig:LeftUpLeg'],
   rightHip: ['mixamorigRightUpLeg', 'mixamorig:RightUpLeg'],
   leftKnee: ['mixamorigLeftLeg', 'mixamorig:LeftLeg'],
@@ -37,6 +38,14 @@ const KNEE_SIGN = 1
 // HIP_FLEX_SIGN to -1 first before touching the axis itself.
 const HIP_FLEX_AXIS = new THREE.Vector3(1, 0, 0)
 const HIP_FLEX_SIGN = 1
+
+// Upper body follows the same hip-tilt lean, at a fraction of the angle -
+// a real torso doesn't rigidly copy the pelvis 1:1, it continues the lean
+// more gently up the spine. Only meaningful now that hipTiltDeg is the real
+// SIGNED value (see calibrateHipTilt in useMetrics.js) - this was NOT worth
+// adding while hip tilt was unsigned, since it would've just doubled down on
+// the "only ever leans one way" bug on two bones instead of one.
+const TORSO_LEAN_FRACTION = 0.5
 
 // There's no ankle IMU, so the foot has no measured angle - only a contact
 // PHASE from the feet FSRs (useMetrics: footPhaseL/R, derived from the
@@ -91,10 +100,16 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       const q = new THREE.Quaternion().setFromAxisAngle(KNEE_AXIS, bend)
       b.rightKnee.quaternion.copy(rest.rightKnee).multiply(q)
     }
-    if (b.hips && rest.hips && hipTiltDeg != null) {
-      const tilt = THREE.MathUtils.degToRad(Math.min(30, hipTiltDeg))
-      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt)
-      b.hips.quaternion.copy(rest.hips).multiply(q)
+    if (hipTiltDeg != null) {
+      const clamped = THREE.MathUtils.clamp(hipTiltDeg, -30, 30)
+      if (b.hips && rest.hips) {
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped))
+        b.hips.quaternion.copy(rest.hips).multiply(q)
+      }
+      if (b.spine && rest.spine) {
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped * TORSO_LEAN_FRACTION))
+        b.spine.quaternion.copy(rest.spine).multiply(q)
+      }
     }
     if (b.leftHip && rest.leftHip) {
       const flex = THREE.MathUtils.degToRad(Math.max(0, hipFlexLDeg ?? 0)) * HIP_FLEX_SIGN

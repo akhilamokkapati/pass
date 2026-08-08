@@ -75,6 +75,16 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // evenly (assumed 50/50 - the only reference this software has).
     balScaleR: 1, lastLoadL: null, lastLoadR: null, calMsgBalance: '',
     feetSettleUntilT: null,
+    // hip TILT direction calibration: hipTilt (via quat.js tiltDeg) is
+    // deliberately unsigned - fine for the "how far off level" ring, useless
+    // for the gait avatar which needs a real left/right direction to rotate
+    // correctly. Same two-click axis-measurement idea as knee/hip-flexion,
+    // but against a single sensor's own captured reference (no second body
+    // to take a relative orientation against) - lean one fixed direction
+    // (right) during calibration so the measured axis's sign convention is
+    // deterministic: positive = leaning right from then on.
+    bufHipTilt: [], calHipTilt: null,
+    calPhaseHipTilt: 'idle', calCaptureHipTilt: null, calMsgHipTilt: '',
   })
   const [m, setM] = useState(null)
 
@@ -149,6 +159,16 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
 
     if (s.hipRef == null && hipOk) s.hipRef = hip.q
     const hipTilt = hipOk && s.hipRef ? tiltDeg(s.hipRef, hip.q) : null
+
+    // Rolling buffer for the hip-tilt DIRECTION calibration below - just the
+    // pelvis's own orientation, no knee board needed (unlike hip flexion).
+    if (hipOk) {
+      s.bufHipTilt.push(hip.q)
+      if (s.bufHipTilt.length > CAL_BUF_MAX) s.bufHipTilt.shift()
+    }
+    const hipTiltSigned = (hipOk && s.calHipTilt)
+      ? angleAboutAxisDeg(qcanon(qrelative(s.calHipTilt.qNeutral, hip.q)), s.calHipTilt.axis)
+      : null
 
     // Rolling raw-quaternion buffer per side, for calibration capture clicks.
     if (kneeLOk) {
@@ -242,6 +262,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
 
     setM({
       kneeLAngle, kneeLOk, kneeRAngle, kneeROk, hipTilt, hipOk,
+      hipTiltSigned, hipTiltCalibrated: !!s.calHipTilt,
+      calPhaseHipTilt: s.calPhaseHipTilt, calMsgHipTilt: s.calMsgHipTilt,
       loadL, loadR, lOk, rOk,
       feetSettling: s.feetSettleUntilT != null && snap.t < s.feetSettleUntilT,
       footPhaseL: lOk ? s.footPhaseL : null, footPhaseR: rOk ? s.footPhaseR : null,
@@ -397,5 +419,42 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.calMsgHip = results.length ? results.join(', ') : 'Movement too small - hold each pose still and try again'
   }
 
-  return { m, zeroHip, zeroFeet, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateBalance }
+  // Two-click flow like the others, but against a SINGLE sensor's own
+  // captured reference (no second body to relate it to): first click
+  // captures "level" as neutral, second click (after leaning RIGHT - a fixed
+  // direction so the sign convention is deterministic) derives the real
+  // left/right axis from the rotation between them. Fixes hipTilt's
+  // unsigned-by-design limitation (see tiltDeg in quat.js) for anything that
+  // needs an actual direction, like the gait avatar's pelvis/torso rotation.
+  const calibrateHipTilt = () => {
+    const s = S.current
+    if (s.bufHipTilt.length < 3) {
+      s.calMsgHipTilt = 'Waiting for hip sensor data - try again in a moment'
+      return
+    }
+    if (s.calPhaseHipTilt === 'idle') {
+      s.calCaptureHipTilt = qaverage(s.bufHipTilt)
+      s.calPhaseHipTilt = 'awaiting-lean'
+      s.calMsgHipTilt = 'Now lean to your RIGHT and hold still, then click again'
+      return
+    }
+    const level = s.calCaptureHipTilt
+    s.calPhaseHipTilt = 'idle'
+    s.calCaptureHipTilt = null
+    if (!level) {
+      s.calMsgHipTilt = 'Sensor dropped mid-capture - try again'
+      return
+    }
+    const leaned = qaverage(s.bufHipTilt)
+    const qOffset = qrelative(level, leaned)
+    const { axis, angleDeg } = axisAngle(qcanon(qOffset))
+    if (angleDeg < MIN_BEND_DEG) {
+      s.calMsgHipTilt = 'Lean too small - hold each pose still and try again'
+      return
+    }
+    s.calHipTilt = { qNeutral: level, axis }
+    s.calMsgHipTilt = 'Calibrated'
+  }
+
+  return { m, zeroHip, zeroFeet, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateHipTilt, calibrateBalance }
 }
