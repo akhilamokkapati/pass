@@ -45,6 +45,10 @@ export default function App() {
 
   const handleLogout = () => { logOut(); setSession(null); setTab('home') }
   const handleZeroFeet = () => { zeroFeet(); setFeetZeroEpoch((e) => e + 1) }
+  // Bundled once so every calibration/reset action lives next to the card it
+  // affects instead of a disconnected button bar at the bottom of the page -
+  // both views render their own subset of these inline.
+  const actions = { zeroHip, zeroFeet: handleZeroFeet, calibrateBalance, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateHipTilt }
 
   return (
     <div className="app">
@@ -87,34 +91,10 @@ export default function App() {
         </div>
       )}
 
-      {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} />}
-      {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} />}
+      {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} actions={actions} />}
+      {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} actions={actions} />}
       {tab === 'gait' && <GaitView m={m} />}
       {tab === 'session' && <ActuationPanel m={m} />}
-
-      <div className="actions">
-        <button className="btn ghost" onClick={zeroHip}>Zero hip (stand tall)</button>
-        <button className="btn ghost" onClick={handleZeroFeet}>Zero feet (lift both off insoles)</button>
-        <button className="btn ghost" onClick={calibrateBalance}>Calibrate balance (stand evenly)</button>
-        <button className="btn ghost" onClick={resetReps}>Reset reps</button>
-        <button className={`btn ghost ${m?.calPhaseL === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKneeL}>
-          {m?.calPhaseL === 'awaiting-bent' ? 'Capture left bent' : 'Calibrate left knee'}
-        </button>
-        <button className={`btn ghost ${m?.calPhaseR === 'awaiting-bent' ? 'on' : ''}`} onClick={calibrateKneeR}>
-          {m?.calPhaseR === 'awaiting-bent' ? 'Capture right bent' : 'Calibrate right knee'}
-        </button>
-        <button className={`btn ghost ${m?.calPhaseHip === 'awaiting-flexed' ? 'on' : ''}`} onClick={calibrateHips}>
-          {m?.calPhaseHip === 'awaiting-flexed' ? 'Capture flexed' : 'Calibrate hip flexion'}
-        </button>
-        <button className={`btn ghost ${m?.calPhaseHipTilt === 'awaiting-lean' ? 'on' : ''}`} onClick={calibrateHipTilt}>
-          {m?.calPhaseHipTilt === 'awaiting-lean' ? 'Capture lean right' : 'Calibrate hip tilt direction'}
-        </button>
-      </div>
-      {m?.calMsgL && <div className="cal-msg center-msg">{m.calMsgL}</div>}
-      {m?.calMsgR && <div className="cal-msg center-msg">{m.calMsgR}</div>}
-      {m?.calMsgHip && <div className="cal-msg center-msg">{m.calMsgHip}</div>}
-      {m?.calMsgHipTilt && <div className="cal-msg center-msg">{m.calMsgHipTilt}</div>}
-      {m?.calMsgBalance && <div className="cal-msg center-msg">{m.calMsgBalance}</div>}
 
       <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
     </div>

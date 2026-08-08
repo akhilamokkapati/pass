@@ -212,7 +212,11 @@ body {
 .hip-flex-stat { margin-top: 6px; color: var(--muted); font-size: 13px; }
 
 .btn.ghost.on { color: var(--warn); border-color: var(--warn-border); background: var(--warn-bg); }
-.cal-msg.center-msg { text-align: center; color: var(--warn); font-size: 13px; margin-top: -6px; margin-bottom: 4px; }
+.cal-msg { text-align: center; color: var(--warn); font-size: 12px; font-weight: 600; margin-top: 8px; }
+
+/* ---- in-card calibration/reset controls (replaces the old bottom action bar) ---- */
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 14px; }
+.card-actions .btn { padding: 7px 12px; font-size: 12px; margin-top: 0; }
 
 /* ---- balance bar ---- */
 .balance { width: 100%; margin-top: 26px; }
@@ -273,7 +277,6 @@ body {
 .sens-val { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 34px; }
 
 /* ---- buttons / footer ---- */
-.actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
 .btn { padding: 10px 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; font-size: 14px; cursor: pointer; }
 .btn.ghost { background: transparent; color: var(--muted); }
 .btn:active { background: var(--press-bg); }

@@ -27,7 +27,7 @@ function kneeSideStats(hist, key) {
   return { romMax, rom, vel }
 }
 
-export default function ClinicianView({ m, snap, feetZeroEpoch }) {
+export default function ClinicianView({ m, snap, feetZeroEpoch, actions }) {
   const hist = m?.hist || []
   const left = kneeSideStats(hist, 'kneeL')
   const right = kneeSideStats(hist, 'kneeR')
@@ -40,6 +40,10 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
   const kneeROk = !!m?.kneeROk
   const hipOk = !!m?.hipOk
   const feetOk = !!(m?.lOk || m?.rOk)
+  const kneeLAwaitingBent = m?.calPhaseL === 'awaiting-bent'
+  const kneeRAwaitingBent = m?.calPhaseR === 'awaiting-bent'
+  const hipTiltAwaitingLean = m?.calPhaseHipTilt === 'awaiting-lean'
+  const hipFlexAwaitingFlexed = m?.calPhaseHip === 'awaiting-flexed'
 
   return (
     <div className="clinician">
@@ -65,6 +69,13 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
           <Stat label="reps" value={m?.repsL ?? 0} unit="" />
           <Stat label="ang. velocity" value={fmt(left.vel, 0)} unit="°/s" />
         </div>
+        <div className="card-actions">
+          <button className={`btn ghost ${kneeLAwaitingBent ? 'on' : ''}`} onClick={actions.calibrateKneeL}>
+            {kneeLAwaitingBent ? 'Capture bent' : 'Calibrate'}
+          </button>
+          <button className="btn ghost" onClick={actions.resetReps}>Reset reps</button>
+        </div>
+        {m?.calMsgL && <div className="cal-msg">{m.calMsgL}</div>}
       </section>
 
       <section className="card accent-knee">
@@ -77,6 +88,13 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
           <Stat label="reps" value={m?.repsR ?? 0} unit="" />
           <Stat label="ang. velocity" value={fmt(right.vel, 0)} unit="°/s" />
         </div>
+        <div className="card-actions">
+          <button className={`btn ghost ${kneeRAwaitingBent ? 'on' : ''}`} onClick={actions.calibrateKneeR}>
+            {kneeRAwaitingBent ? 'Capture bent' : 'Calibrate'}
+          </button>
+          <button className="btn ghost" onClick={actions.resetReps}>Reset reps</button>
+        </div>
+        {m?.calMsgR && <div className="cal-msg">{m.calMsgR}</div>}
       </section>
 
       <section className="card accent-hip">
@@ -86,6 +104,17 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
           <Stat label="current tilt" value={fmt(m?.hipTilt, 1)} unit="°" />
           <Stat label="max tilt" value={fmt(hipMax, 0)} unit="°" />
         </div>
+        <div className="card-actions">
+          <button className="btn ghost" onClick={actions.zeroHip}>Zero hip</button>
+          <button className={`btn ghost ${hipTiltAwaitingLean ? 'on' : ''}`} onClick={actions.calibrateHipTilt}>
+            {hipTiltAwaitingLean ? 'Capture lean right' : 'Calibrate tilt direction'}
+          </button>
+          <button className={`btn ghost ${hipFlexAwaitingFlexed ? 'on' : ''}`} onClick={actions.calibrateHips}>
+            {hipFlexAwaitingFlexed ? 'Capture flexed' : 'Calibrate hip flexion'}
+          </button>
+        </div>
+        {m?.calMsgHipTilt && <div className="cal-msg">{m.calMsgHipTilt}</div>}
+        {m?.calMsgHip && <div className="cal-msg">{m.calMsgHip}</div>}
       </section>
 
       <section className="card accent-balance">
@@ -121,6 +150,11 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
           <Stat label="feet" value={feetOk ? 'connected' : 'not conn.'} unit="" />
         </div>
         <FeetMap feet={snap?.feet} resetKey={feetZeroEpoch} />
+        <div className="card-actions">
+          <button className="btn ghost" onClick={actions.zeroFeet}>Zero feet</button>
+          <button className="btn ghost" onClick={actions.calibrateBalance}>Calibrate balance</button>
+        </div>
+        {m?.calMsgBalance && <div className="cal-msg">{m.calMsgBalance}</div>}
       </section>
     </div>
   )

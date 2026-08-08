@@ -82,8 +82,10 @@ function CadenceCard({ cadence }) {
   )
 }
 
-function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag, hipFlex, hipFlexCalibrated }) {
+function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag, hipFlex, hipFlexCalibrated,
+  calPhase, calMsg, onCalibrate, onResetReps }) {
   const reached = ok && angle >= kneeTarget
+  const awaitingBent = calPhase === 'awaiting-bent'
   return (
     <div className={`card center accent-knee ${ok ? '' : 'off'}`}>
       <Head title={title} ok={ok} />
@@ -103,15 +105,24 @@ function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag, hipFlex, hipFl
           )}
         </>
       ) : <div className="cue">Waiting for sensor</div>}
+      <div className="card-actions">
+        <button className={`btn ghost ${awaitingBent ? 'on' : ''}`} onClick={onCalibrate}>
+          {awaitingBent ? 'Capture bent' : 'Calibrate'}
+        </button>
+        <button className="btn ghost" onClick={onResetReps}>Reset reps</button>
+      </div>
+      {calMsg && <div className="cal-msg">{calMsg}</div>}
     </div>
   )
 }
 
-export default function PatientView({ m, kneeTarget, session }) {
+export default function PatientView({ m, kneeTarget, session, actions }) {
   const hipOk = !!m?.hipOk
   const feetOk = !!(m?.lOk || m?.rOk)
   const hipLevel = hipOk && m.hipTilt < 10
   const profile = profileSummary(session)
+  const hipTiltAwaitingLean = m?.calPhaseHipTilt === 'awaiting-lean'
+  const hipFlexAwaitingFlexed = m?.calPhaseHip === 'awaiting-flexed'
 
   return (
     <div className="patient-wrap">
@@ -119,14 +130,23 @@ export default function PatientView({ m, kneeTarget, session }) {
       <div className="grid patient">
       <KneeCard title="Left knee bend" ok={!!m?.kneeLOk} angle={m?.kneeLAngle}
         reps={m?.repsL} kneeTarget={kneeTarget} formFlag={m?.formFlagL}
-        hipFlex={m?.hipFlexL} hipFlexCalibrated={!!m?.hipFlexCalibratedL} />
+        hipFlex={m?.hipFlexL} hipFlexCalibrated={!!m?.hipFlexCalibratedL}
+        calPhase={m?.calPhaseL} calMsg={m?.calMsgL}
+        onCalibrate={actions.calibrateKneeL} onResetReps={actions.resetReps} />
       <KneeCard title="Right knee bend" ok={!!m?.kneeROk} angle={m?.kneeRAngle}
         reps={m?.repsR} kneeTarget={kneeTarget} formFlag={m?.formFlagR}
-        hipFlex={m?.hipFlexR} hipFlexCalibrated={!!m?.hipFlexCalibratedR} />
+        hipFlex={m?.hipFlexR} hipFlexCalibrated={!!m?.hipFlexCalibratedR}
+        calPhase={m?.calPhaseR} calMsg={m?.calMsgR}
+        onCalibrate={actions.calibrateKneeR} onResetReps={actions.resetReps} />
 
       <div className={`card center accent-balance ${feetOk ? '' : 'off'}`}>
         <Head title="Weight balance" ok={feetOk} />
         <BalanceBar m={m} />
+        <div className="card-actions">
+          <button className="btn ghost" onClick={actions.zeroFeet}>Zero feet</button>
+          <button className="btn ghost" onClick={actions.calibrateBalance}>Calibrate balance</button>
+        </div>
+        {m?.calMsgBalance && <div className="cal-msg">{m.calMsgBalance}</div>}
       </div>
 
       <div className={`card center accent-hip ${hipOk ? '' : 'off'}`}>
@@ -136,6 +156,17 @@ export default function PatientView({ m, kneeTarget, session }) {
         <div className={`cue ${hipOk && hipLevel ? 'good' : ''}`}>
           {hipOk ? (hipLevel ? 'Level' : 'Straighten up') : 'Waiting for sensor'}
         </div>
+        <div className="card-actions">
+          <button className="btn ghost" onClick={actions.zeroHip}>Zero hip</button>
+          <button className={`btn ghost ${hipTiltAwaitingLean ? 'on' : ''}`} onClick={actions.calibrateHipTilt}>
+            {hipTiltAwaitingLean ? 'Capture lean right' : 'Calibrate tilt direction'}
+          </button>
+          <button className={`btn ghost ${hipFlexAwaitingFlexed ? 'on' : ''}`} onClick={actions.calibrateHips}>
+            {hipFlexAwaitingFlexed ? 'Capture flexed' : 'Calibrate hip flexion'}
+          </button>
+        </div>
+        {m?.calMsgHipTilt && <div className="cal-msg">{m.calMsgHipTilt}</div>}
+        {m?.calMsgHip && <div className="cal-msg">{m.calMsgHip}</div>}
       </div>
 
       </div>
