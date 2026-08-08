@@ -60,11 +60,10 @@ const FOOT_EASE_PER_SEC = 10
 // measured reading: Mixamo characters load in a T-pose (arms straight out),
 // which reads as broken/robotic on a standing avatar. Rotating each arm bone
 // brings it down to the character's side instead. First attempt used the Z
-// axis and produced NO visible movement - on this rig, X is the confirmed
-// "swing" axis for limb bones (KNEE_AXIS and HIP_FLEX_AXIS both use it, and
-// both are visually verified working), so Z was very likely just twisting
-// the arm around its own length instead of swinging it. Matching that
-// convention here. Sign is opposite per side because the rig mirrors the
+// axis and produced NO visible movement; switched to X (confirmed working
+// for KNEE_AXIS/HIP_FLEX_AXIS) which DID move the arms, but the sign was
+// backwards - arms went straight UP instead of down (seen live, not
+// guessed). Signs below are now flipped to match. Opposite per side because
 // bind pose left/right.
 const ARM_DOWN_AXIS = new THREE.Vector3(1, 0, 0)
 const ARM_DOWN_DEG = 75
@@ -139,11 +138,11 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     }
 
     if (b.leftArm && rest.leftArm) {
-      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(ARM_DOWN_DEG))
+      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(-ARM_DOWN_DEG))
       b.leftArm.quaternion.copy(rest.leftArm).multiply(q)
     }
     if (b.rightArm && rest.rightArm) {
-      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(-ARM_DOWN_DEG))
+      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(ARM_DOWN_DEG))
       b.rightArm.quaternion.copy(rest.rightArm).multiply(q)
     }
   })
