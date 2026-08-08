@@ -16,7 +16,9 @@ function useTheme() {
   const [theme, setTheme] = useState(() => {
     const stored = localStorage.getItem(THEME_KEY)
     if (stored) return stored
-    return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+    // Clinical light theme is the intended default look now - dark mode is
+    // still available via the toggle, just no longer what new sessions see.
+    return 'light'
   })
   useEffect(() => {
     document.documentElement.dataset.theme = theme

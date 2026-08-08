@@ -17,7 +17,10 @@ function pressureColor(t) {
   let r, g, b
   if (t < 0.5) {
     const u = t / 0.5
-    r = lerp(0x25, 0xf5, u); g = lerp(0x2a, 0xc2, u); b = lerp(0x33, 0x00, u)
+    // Mid-gray "no pressure" start (not near-black) - readable on both the
+    // dark and light themes without needing to detect which is active,
+    // unlike the old near-black start which vanished on a light background.
+    r = lerp(0x9a, 0xf5, u); g = lerp(0xa3, 0xc2, u); b = lerp(0xb0, 0x00, u)
   } else {
     const u = (t - 0.5) / 0.5
     r = lerp(0xf5, 0xff, u); g = lerp(0xc2, 0x3b, u); b = lerp(0x00, 0x30, u)
@@ -60,7 +63,7 @@ function Foot({ side, zones, data, fullScale, resetKey }) {
           return (
             <circle key={ch} cx={cx} cy={cy} r={anat ? 14 : 12}
               fill={pressureColor(val / fullScale)} className="zone"
-              stroke={anat ? '#ffffff55' : '#00000055'} />
+              stroke={anat ? '#8b96a599' : '#8b96a533'} />
           )
         }) : (
           <text x={W / 2} y={H / 2} textAnchor="middle" className="foot-off">not connected</text>

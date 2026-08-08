@@ -11,6 +11,16 @@
   --warn: #f6c24b;
   --off: #5a6472;
   --bg-glow: #16233a;
+  /* Status-badge fills and other spot colors that used to be hardcoded
+     regardless of theme - fine on dark, but a hardcoded dark badge/shadow
+     reads as a broken dark hole once the light theme is the default. */
+  --ok-bg: #12271d;
+  --ok-border: #1f5138;
+  --warn-bg: #241d0f;
+  --warn-border: #6b5420;
+  --press-bg: #283040;
+  --shadow: #0008;
+  --shadow-lg: #0006;
 }
 
 :root[data-theme="light"] {
@@ -26,6 +36,13 @@
   --warn: #b8790c;
   --off: #aab3c2;
   --bg-glow: #d9e6fb;
+  --ok-bg: #e3f6ec;
+  --ok-border: #b7e6cc;
+  --warn-bg: #fdf1dc;
+  --warn-border: #f0d29c;
+  --press-bg: #e3e8f0;
+  --shadow: #1a22331a;
+  --shadow-lg: #1a223326;
 }
 
 * { box-sizing: border-box; }
@@ -56,7 +73,7 @@ body {
 .modeswitch button.on { background: linear-gradient(90deg, #2b6fd6, #2f8f74); color: #fff; box-shadow: 0 4px 14px #2b6fd655; }
 
 .conn { font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
-.conn.on { color: var(--ok); border-color: #1f5138; background: #12271d; }
+.conn.on { color: var(--ok); border-color: var(--ok-border); background: var(--ok-bg); }
 .conn.on::before { content: "\25CF  "; }
 .conn.off { color: var(--muted); }
 .conn.off::before { content: "\25CB  "; }
@@ -70,7 +87,7 @@ body {
 
 /* ---- auth (login / create account) ---- */
 .auth-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
-.auth-card { width: 100%; max-width: 380px; background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: 20px; padding: 28px 26px; box-shadow: 0 20px 60px #0006; }
+.auth-card { width: 100%; max-width: 380px; background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: 20px; padding: 28px 26px; box-shadow: 0 20px 60px var(--shadow-lg); }
 .auth-brand { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 22px; text-align: center; }
 .auth-tabs { display: flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin-bottom: 20px; }
 .auth-tabs button { flex: 1; border: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: 13px; padding: 9px 0; border-radius: 999px; cursor: pointer; }
@@ -96,7 +113,7 @@ body {
 /* ---- status pill ---- */
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .3px; padding: 3px 9px 3px 7px; border-radius: 999px; border: 1px solid var(--line); }
 .pill-dot { width: 7px; height: 7px; border-radius: 50%; }
-.pill.live { color: var(--ok); background: #12271d; border-color: #1f5138; }
+.pill.live { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-border); }
 .pill.live .pill-dot { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
 .pill.down { color: var(--muted); background: var(--surface-2); }
 .pill.down .pill-dot { background: var(--off); }
@@ -123,18 +140,18 @@ body {
 /* ---- empty banner ---- */
 .empty { display: flex; align-items: center; gap: 14px; background: var(--surface-2); border: 1px dashed var(--line); border-radius: 14px; padding: 15px 18px; margin-bottom: 16px; color: var(--muted); }
 .empty b { color: var(--text); }
-.empty-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--off); flex: none; box-shadow: 0 0 0 4px #ffffff0d; }
+.empty-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--off); flex: none; box-shadow: 0 0 0 4px var(--surface-2); }
 
 /* ---- cards ---- */
 .card {
   background: linear-gradient(180deg, var(--panel), var(--panel-2));
   border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px;
-  box-shadow: 0 12px 36px #0008;
+  box-shadow: 0 12px 36px var(--shadow);
 }
-.accent-knee { box-shadow: inset 0 3px 0 #4ea1ff, 0 12px 36px #0008; }
-.accent-hip { box-shadow: inset 0 3px 0 #f6c24b, 0 12px 36px #0008; }
-.accent-balance { box-shadow: inset 0 3px 0 #3ddc84, 0 12px 36px #0008; }
-.accent-actuation { box-shadow: inset 0 3px 0 #c77bf0, 0 12px 36px #0008; }
+.accent-knee { box-shadow: inset 0 3px 0 #4ea1ff, 0 12px 36px var(--shadow); }
+.accent-hip { box-shadow: inset 0 3px 0 #f6c24b, 0 12px 36px var(--shadow); }
+.accent-balance { box-shadow: inset 0 3px 0 #3ddc84, 0 12px 36px var(--shadow); }
+.accent-actuation { box-shadow: inset 0 3px 0 #c77bf0, 0 12px 36px var(--shadow); }
 .card.off { opacity: .72; }
 .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 10px; }
 .card-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
@@ -189,7 +206,7 @@ body {
 .form-flag { margin-top: 6px; color: var(--warn); font-size: 13px; font-weight: 600; }
 .hip-flex-stat { margin-top: 6px; color: var(--muted); font-size: 13px; }
 
-.btn.ghost.on { color: var(--warn); border-color: #6b5420; background: #241d0f; }
+.btn.ghost.on { color: var(--warn); border-color: var(--warn-border); background: var(--warn-bg); }
 .cal-msg.center-msg { text-align: center; color: var(--warn); font-size: 13px; margin-top: -6px; margin-bottom: 4px; }
 
 /* ---- balance bar ---- */
@@ -226,7 +243,7 @@ body {
 .gait-skinpicker-label { color: var(--muted); font-size: 13px; margin-right: 4px; }
 .gait-skinpicker button { border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
 .gait-skinpicker button.on { background: linear-gradient(90deg, #2b6fd6, #2f8f74); color: #fff; border-color: transparent; }
-.gait-canvas-wrap { position: relative; height: 70vh; min-height: 420px; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 12px 36px #0008; }
+.gait-canvas-wrap { position: relative; height: 70vh; min-height: 420px; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 12px 36px var(--shadow); }
 .gait-canvas-wrap canvas { display: block; }
 .gait-hint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: var(--muted); font-size: 13px; background: #0009; padding: 8px 14px; border-radius: 999px; pointer-events: none; }
 .gait-centre { position: absolute; top: 14px; right: 14px; border: 1px solid var(--line); background: #0009; color: var(--text); font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px; cursor: pointer; }
@@ -243,7 +260,7 @@ body {
 .zone { transition: fill .08s linear; }
 .legend { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
 .legend-label { color: var(--muted); font-size: 12px; }
-.legend-bar { width: 160px; height: 8px; border-radius: 999px; background: linear-gradient(90deg, #252a33, #f5c200, #ff3b30); }
+.legend-bar { width: 160px; height: 8px; border-radius: 999px; background: linear-gradient(90deg, #9aa3b0, #f5c200, #ff3b30); }
 .foot-load { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 4px; }
 .sens-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
 .sens-row input[type="range"] { width: 140px; accent-color: var(--accent); }
@@ -253,7 +270,7 @@ body {
 .actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
 .btn { padding: 10px 15px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-weight: 600; font-size: 14px; cursor: pointer; }
 .btn.ghost { background: transparent; color: var(--muted); }
-.btn:active { background: #283040; }
+.btn:active { background: var(--press-bg); }
 .btn.download { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(90deg, #2b6fd6, #2f8f74); border: 0; color: #fff; box-shadow: 0 6px 18px #2b6fd644; }
 .dl-ico { width: 14px; height: 14px; border: 2px solid #fff; border-top: 0; border-radius: 0 0 3px 3px; position: relative; }
 .dl-ico::before { content: ""; position: absolute; left: 4px; top: -8px; width: 2px; height: 8px; background: #fff; }
