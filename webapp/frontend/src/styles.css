@@ -166,6 +166,11 @@ body {
 @media (max-width: 1180px) { .grid.patient { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .grid.patient { grid-template-columns: 1fr; } }
 
+.grid.performance { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) { .grid.performance { grid-template-columns: 1fr; } }
+.score-big { font-size: 44px; font-weight: 800; margin-top: 6px; }
+.score-big span { font-size: 16px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+
 /* ---- actuation / session tab ---- */
 .grid.actuation { grid-template-columns: repeat(3, 1fr); }
 @media (max-width: 900px) { .grid.actuation { grid-template-columns: 1fr; } }
@@ -257,6 +262,7 @@ body {
 .foot-svg { width: 100%; height: auto; max-height: 320px; }
 .foot-outline { fill: var(--surface-2); stroke: #3a4552; stroke-width: 2.5; }
 .foot-off { fill: var(--muted); font-size: 13px; font-weight: 600; }
+.cop-dot { fill: #fff; stroke: #1a2233; stroke-width: 2; transition: cx .1s linear, cy .1s linear; }
 .zone { transition: fill .08s linear; }
 .legend { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
 .legend-label { color: var(--muted); font-size: 12px; }

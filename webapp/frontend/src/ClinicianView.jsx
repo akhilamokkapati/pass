@@ -90,6 +90,24 @@ export default function ClinicianView({ m, snap, feetZeroEpoch }) {
 
       <section className="card accent-balance">
         <div className="card-head">
+          <h3>Gait timing &amp; symmetry</h3>
+          <span className="legend-inline">SI formula: |L-R| / (0.5*(L+R)) &times; 100</span>
+        </div>
+        <div className="stat-row">
+          <Stat label="stance L" value={fmt(m?.stancePctL, 0)} unit="%" />
+          <Stat label="stance R" value={fmt(m?.stancePctR, 0)} unit="%" />
+          <Stat label="double support" value={fmt(m?.doubleSupportPct, 0)} unit="%" />
+          <Stat label="cadence" value={fmt(m?.cadence, 0)} unit=" spm" />
+        </div>
+        <div className="stat-row">
+          <Stat label="SI - stance time" value={fmt(m?.siStance, 1)} unit="%" />
+          <Stat label="SI - knee flexion" value={fmt(m?.siKneeFlex, 1)} unit="%" />
+          <Stat label="rehab score" value={m?.rehabScore ?? '--'} unit="/100" />
+        </div>
+      </section>
+
+      <section className="card accent-balance">
+        <div className="card-head">
           <h3>Foot loading and symmetry</h3>
           <span className="legend-inline"><i className="dot blue" /> left <i className="dot orange" /> right</span>
         </div>

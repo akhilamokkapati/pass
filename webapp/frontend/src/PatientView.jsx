@@ -34,6 +34,54 @@ function BalanceBar({ m }) {
   )
 }
 
+// Green/yellow/red thresholds match the reference clinical spec's Symmetry
+// Score bands: >90% well balanced, 75-89% borderline, <75% needs work.
+function symmetryColor(pct) {
+  if (pct == null) return '#8b96a5'
+  if (pct >= 90) return '#3ddc84'
+  if (pct >= 75) return '#f6c24b'
+  return '#ff5a4d'
+}
+
+function ScoreCard({ score }) {
+  return (
+    <div className={`card center accent-balance ${score == null ? 'off' : ''}`}>
+      <Head title="Rehab score" ok={score != null} />
+      <div className="score-big">{score ?? '--'}<span>/ 100</span></div>
+      <div className="cue">
+        {score == null ? 'Not enough data yet' : score >= 90 ? 'Excellent' : score >= 75 ? 'Good progress' : 'Keep going'}
+      </div>
+    </div>
+  )
+}
+
+// Symmetry Index (SI) turned into a "goodness" percent for the ring - see
+// useMetrics.js for how SI itself is derived (stance-time + knee-flexion
+// comparison, standard SI = |L-R| / (0.5*(L+R)) * 100 formula).
+function SymmetryCard({ si }) {
+  const pct = si != null ? Math.max(0, 100 - si) : null
+  const good = pct != null && pct >= 90
+  return (
+    <div className={`card center accent-balance ${pct == null ? 'off' : ''}`}>
+      <Head title="Leg symmetry" ok={pct != null} />
+      <Ring value={pct} max={100} unit="%" sub="target >90%" reached={good} color={symmetryColor(pct)} />
+      <div className={`cue ${good ? 'good' : ''}`}>
+        {pct == null ? 'Waiting for data' : good ? 'Well balanced' : 'Work on evening out left/right'}
+      </div>
+    </div>
+  )
+}
+
+function CadenceCard({ cadence }) {
+  return (
+    <div className={`card center accent-hip ${cadence == null ? 'off' : ''}`}>
+      <Head title="Cadence" ok={cadence != null} />
+      <Ring value={cadence} max={140} unit="" sub="steps / min" color="#c77bf0" />
+      <div className="cue">{cadence == null ? 'Keep walking to measure' : 'Steps per minute'}</div>
+    </div>
+  )
+}
+
 function KneeCard({ title, ok, angle, reps, kneeTarget, formFlag, hipFlex, hipFlexCalibrated }) {
   const reached = ok && angle >= kneeTarget
   return (
@@ -89,6 +137,13 @@ export default function PatientView({ m, kneeTarget, session }) {
           {hipOk ? (hipLevel ? 'Level' : 'Straighten up') : 'Waiting for sensor'}
         </div>
       </div>
+
+      </div>
+
+      <div className="grid performance">
+        <ScoreCard score={m?.rehabScore} />
+        <SymmetryCard si={m?.symmetryIndexOverall} />
+        <CadenceCard cadence={m?.cadence} />
       </div>
     </div>
   )
