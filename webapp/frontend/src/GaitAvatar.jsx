@@ -70,18 +70,30 @@ const FOOT_EASE_PER_SEC = 10
 //
 // First attempt hardcoded a single rest direction (+X/-X) derived from
 // Xbot.glb's specific bind pose. That only fixed Xbot - Michelle and Marker
-// Man kept the T-pose because their arm bones don't rest along the same
-// local axis (different bind pose per model/rig export, even sharing the
-// Mixamo bone NAMES doesn't guarantee the same rest ORIENTATION). Fixed
-// generically instead: ForeArm's rest-pose local position is the direction
-// FROM the Arm bone TO the ForeArm bone, expressed in the Arm bone's own
-// local space (position is independent of the parent's rotation, so this
-// works regardless of what that rest rotation actually is) - i.e. "which way
-// the upper arm points, right now, in this specific model's bind pose". That
-// measured direction is what setFromUnitVectors rotates from, computed fresh
-// per loaded model instead of assumed from one reference model. Falls back
-// to no correction (leaves the T-pose) if a ForeArm bone isn't found, rather
-// than guessing.
+// Man kept a broken/twisted-looking pose (not a clean T-pose OR a clean
+// arms-down, something in between) for two stacked reasons:
+//
+// 1) The rest direction itself was Xbot-specific. Fixed by measuring it per
+//    model instead: ForeArm's rest-pose local position is the direction FROM
+//    the Arm bone TO the ForeArm bone, expressed in the Arm bone's own local
+//    space (position is independent of the parent's rotation, so this works
+//    regardless of what that rotation actually is) - "which way the upper
+//    arm points, right now, in THIS model's bind pose", computed fresh per
+//    loaded model instead of assumed from one reference model.
+//
+// 2) How the correction gets APPLIED was also Xbot-specific, more subtly:
+//    every other corrected bone here (knee bend, hip flex, foot pitch) uses
+//    `rest.multiply(delta)` because those add an incremental rotation ON TOP
+//    of an already-correct rest pose. The arm correction is not incremental
+//    - it REPLACES a broken rest pose, so composing it onto `rest` first
+//    only produces the right answer when rest happens to be the identity
+//    quaternion (true for Xbot, NOT guaranteed for every model/rig export -
+//    Michelle/Marker Man's arm bones carry a real rest rotation, and
+//    `rest.multiply(correction)` on top of that produced the twisted result
+//    above). `correction` alone already satisfies "rotate restDir to
+//    ARM_TARGET_DIR" by construction (that's what setFromUnitVectors solves
+//    for) - the bone's quaternion is set to `correction` directly, with no
+//    rest pose folded in.
 const ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
@@ -169,12 +181,15 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
     }
 
+    // Not composed onto `rest` like every other bone above - see the
+    // ARM_TARGET_DIR comment: this correction replaces the rest pose rather
+    // than adding to it, so `rest` must NOT be folded in here.
     const armDown = armDownQuat.current
-    if (b.leftArm && rest.leftArm && armDown.left) {
-      b.leftArm.quaternion.copy(rest.leftArm).multiply(armDown.left)
+    if (b.leftArm && armDown.left) {
+      b.leftArm.quaternion.copy(armDown.left)
     }
-    if (b.rightArm && rest.rightArm && armDown.right) {
-      b.rightArm.quaternion.copy(rest.rightArm).multiply(armDown.right)
+    if (b.rightArm && armDown.right) {
+      b.rightArm.quaternion.copy(armDown.right)
     }
   })
 }
