@@ -19,6 +19,7 @@
  * comma-separated), and matches webapp/backend/ingest.py exactly:
  *   OUT (telemetry, this board -> laptop, UDP :5007):
  *     actuation,seq,t_ms,tension_n,state\n
+ * 
  *     tension_n/state are placeholders (0.0 / "idle") until the strain gauge
  *     and motor are wired in.
  *   IN  (commands, laptop -> this board, UDP :5008):
