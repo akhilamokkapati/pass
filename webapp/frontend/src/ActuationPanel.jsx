@@ -344,9 +344,9 @@ export default function ActuationPanel({ m, session }) {
         </div>
       )}
 
-      <ActuationLogCard refreshKey={logRefreshKey} />
-
       <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
+
+      <ActuationLogCard refreshKey={logRefreshKey} />
     </div>
   )
 }

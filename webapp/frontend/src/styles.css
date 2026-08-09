@@ -193,12 +193,7 @@ body {
 .act-summary-actions .btn { margin-top: 0; flex: 1; }
 .act-jog { display: flex; gap: 10px; width: 100%; }
 .act-jog .btn { flex: 1; margin-top: 4px; user-select: none; }
-.act-force-stop {
-  grid-column: 1 / -1; border-color: #b0202f; color: #fff; background: #c0293b;
-  font-weight: 700; letter-spacing: .3px;
-}
-.act-force-stop:hover { background: #d43649; }
-.act-force-stop:active { background: #9e1f2d; }
+.act-force-stop { grid-column: 1 / -1; font-weight: 700; letter-spacing: .3px; }
 
 /* ---- logs tab ---- */
 .log-card .card-head { margin-bottom: 14px; }
@@ -293,6 +288,13 @@ body {
 .btn.ghost { background: transparent; color: var(--muted); }
 .btn:active { background: var(--press-bg); }
 .btn.download { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(90deg, #2b6fd6, #2f8f74); border: 0; color: #fff; box-shadow: 0 6px 18px #2b6fd644; }
+/* .btn.ghost's `background: transparent` (same 2-class specificity) would
+   otherwise win by source order over a plain .act-force-stop rule - chain
+   both classes here so this reliably beats it regardless of where either
+   rule sits in the file. */
+.btn.act-force-stop { border-color: #b0202f; color: #fff; background: #c0293b; }
+.btn.act-force-stop:hover { background: #d43649; }
+.btn.act-force-stop:active { background: #9e1f2d; }
 .dl-ico { width: 14px; height: 14px; border: 2px solid #fff; border-top: 0; border-radius: 0 0 3px 3px; position: relative; }
 .dl-ico::before { content: ""; position: absolute; left: 4px; top: -8px; width: 2px; height: 8px; background: #fff; }
 .dl-ico::after { content: ""; position: absolute; left: 1px; top: -3px; width: 6px; height: 6px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg); }
