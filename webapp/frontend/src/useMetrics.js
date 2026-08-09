@@ -624,7 +624,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
         }
       }
       s.calPhaseHip = 'awaiting-flexed'
-      s.calMsgHip = 'Now raise the knee(s)/flex the hip ~30-60° and hold still, then click again'
+      s.calMsgHip = 'Now lift one knee up and forward, like marching in place, until your thigh ' +
+        'is about 30-60° off vertical - hold still, then click again'
       return
     }
 

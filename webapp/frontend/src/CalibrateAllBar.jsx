@@ -61,7 +61,8 @@ function buildSteps(m) {
       key: 'hipFlex', label: 'Hip flexion',
       prompts: [
         'Stand straight and hold still, then click Next.',
-        'Now raise your knee(s) (flex your hip) about 30-60° and hold still, then click Next.',
+        'Now lift one knee up and forward, like marching in place, until your thigh is about ' +
+        '30-60° off vertical. Hold still, then click Next.',
       ],
       run: (actions) => actions.calibrateHips(),
       result: (m) => m?.calMsgHip,
