@@ -57,7 +57,7 @@ const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
 // Preset force-level buttons (kg) replacing the old 0-100 slider. Sent to the
 // board as-is (raw kg), matching set_force/twist's existing unit convention -
 // tension_n already reads on this same scale, not true SI Newtons.
-const KG_OPTIONS = [2, 4, 6, 8, 10, 12]
+const KG_OPTIONS = [1, 2, 3, 4, 5]
 
 async function sendCmd(cmd, value = 0) {
   try {
