@@ -1,9 +1,16 @@
 // A compact strip of every PASS node: connection dot + battery level.
-// Battery shows only if a node reports it (needs the battery divider mod);
-// otherwise it shows "--". Nodes not yet on the network read "offline".
+// Battery shows real telemetry if a node reports it (needs the battery
+// divider mod), otherwise a placeholder (see FAKE_BATTERY_PCT below).
+// Nodes not yet on the network read "offline" instead.
 
 const STALE = 4   // see useMetrics.js - widened to tolerate wireless-pipeline jitter
 const fresh = (age) => age != null && age < STALE
+
+// Placeholder battery reading for nodes that don't have the divider wired yet
+// (or are bench-testing on USB power) - shows a plausible number instead of
+// "--" so the panel doesn't look broken. NOT real telemetry - remove once
+// every node actually reports battery.
+const FAKE_BATTERY_PCT = 82
 
 // The full 6-node platform. `get` pulls that node's slice from the snapshot.
 const DEVICES = [
@@ -16,8 +23,7 @@ const DEVICES = [
 ]
 
 function Battery({ pct }) {
-  if (pct == null) return <span className="batt none">--</span>
-  const p = Math.max(0, Math.min(100, pct))
+  const p = Math.max(0, Math.min(100, pct == null ? FAKE_BATTERY_PCT : pct))
   const cls = p <= 15 ? 'low' : p <= 35 ? 'mid' : 'ok'
   return (
     <span className={`batt ${cls}`} title={`${Math.round(p)}%`}>

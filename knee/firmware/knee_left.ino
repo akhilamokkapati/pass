@@ -26,6 +26,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <esp_task_wdt.h>
 #include "SparkFun_BNO080_Arduino_Library.h"
 
 // ---- identity ---------------------------------------------------------
@@ -67,6 +68,23 @@ static const uint32_t POST_ENABLE_MS  = 50;
 // Runtime robustness.
 static const uint32_t SILENT_TIMEOUT_MS = 1000; // re-enable a sensor silent this long
 static const uint32_t HEALTH_MS         = 5000; // '#' health line cadence
+
+// ---- fault recovery ---------------------------------------------------
+// Hardware watchdog: if loop() ever truly hangs (e.g. an I2C bus lockup from
+// the BNO085's clock-stretching - a known way for that bus to wedge if a
+// transfer gets cut mid-transaction), this force-reboots the board instead
+// of it silently dying with the status LED frozen solid, needing a physical
+// power-cycle to notice or fix.
+static const uint32_t WDT_TIMEOUT_S = 8;
+// Zombie-WiFi guard: WiFi.status() is a cached flag that can keep reporting
+// WL_CONNECTED after the AP has actually dropped the association (seen on
+// flaky routers). A genuinely joined station always has a real (negative)
+// RSSI from beacon reception, so RSSI==0 while "connected" is the tell.
+// After this many consecutive bad reads, force a disconnect so the normal
+// reconnect path (auto-reconnect) kicks back in instead of streaming into
+// the void forever while the LED still shows solid.
+static const uint32_t ZOMBIE_CHECK_MS = 3000;
+static const uint8_t  ZOMBIE_LIMIT    = 3;
 
 WiFiUDP udp;
 IPAddress dest;
@@ -135,6 +153,23 @@ bool initSensor(BNO080 &imu, uint8_t addr, const char *name) {
   return false;
 }
 
+// Arms the hardware watchdog. Called at the END of setup(), after the blocking
+// WiFi-join wait and sensor-init retries are done, so normal startup delays
+// (which can legitimately run several seconds) never trip a false reboot.
+// The esp_task_wdt_init signature changed in arduino-esp32 core 3.x (struct
+// config instead of two plain args); this covers both so the build doesn't
+// silently depend on which core version happens to be installed.
+void wdtBegin() {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  esp_task_wdt_config_t wdtConfig = { .timeout_ms = WDT_TIMEOUT_S * 1000, .idle_core_mask = 0, .trigger_panic = true };
+  esp_task_wdt_init(&wdtConfig);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_S, true);
+#endif
+  esp_task_wdt_add(NULL);   // watch the loop() task; core 3.x's default init may
+                             // already have one running - adding again is harmless.
+}
+
 // Kick off a (non-blocking) join. Never waits; loop() reports when it lands.
 void wifiBegin() {
   // EXACT minimal sequence the working feet use - nothing else, so the knee
@@ -182,11 +217,32 @@ void setup() {
   shankLastReport = now;
   lastHealth = now;
 
+  wdtBegin();   // arm last, after all the blocking setup work above is done
+
   if (Serial) Serial.println("# streaming: " UNIT_ID ",seq,t_ms,knee_angle_deg,qtw,qtx,qty,qtz,qsw,qsx,qsy,qsz");
 }
 
 void loop() {
   uint32_t now = millis();
+  esp_task_wdt_reset();   // feed the watchdog every pass - see wdtBegin()
+
+  // Zombie-WiFi check: status() says connected but RSSI reads 0 (no real
+  // signal) - force a disconnect so auto-reconnect actually rejoins instead
+  // of streaming into the void with a solid LED. See ZOMBIE_* above.
+  static uint32_t lastZombieCheck = 0;
+  static uint8_t  zombieStreak = 0;
+  if (now - lastZombieCheck >= ZOMBIE_CHECK_MS) {
+    lastZombieCheck = now;
+    if (WiFi.status() == WL_CONNECTED && WiFi.RSSI() == 0) {
+      if (++zombieStreak >= ZOMBIE_LIMIT) {
+        if (Serial) Serial.println("# WARN zombie WiFi (RSSI stuck at 0) - forcing reconnect");
+        WiFi.disconnect();
+        zombieStreak = 0;
+      }
+    } else {
+      zombieStreak = 0;
+    }
+  }
 
   // status LED: solid = joined, blinking = searching
   if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LED_ON);
