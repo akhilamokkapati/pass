@@ -17,7 +17,10 @@ function pressureColor(t) {
   let r, g, b
   if (t < 0.5) {
     const u = t / 0.5
-    r = lerp(0x25, 0xf5, u); g = lerp(0x2a, 0xc2, u); b = lerp(0x33, 0x00, u)
+    // Mid-gray "no pressure" start (not near-black) - readable on both the
+    // dark and light themes without needing to detect which is active,
+    // unlike the old near-black start which vanished on a light background.
+    r = lerp(0x9a, 0xf5, u); g = lerp(0xa3, 0xc2, u); b = lerp(0xb0, 0x00, u)
   } else {
     const u = (t - 0.5) / 0.5
     r = lerp(0xf5, 0xff, u); g = lerp(0xc2, 0x3b, u); b = lerp(0x00, 0x30, u)
@@ -43,6 +46,13 @@ function Foot({ side, zones, data, fullScale, resetKey }) {
   const W = 150, H = 210
   const mirror = side === 'right' ? `translate(${W},0) scale(-1,1)` : undefined
   let total = 0
+  // Center of Pressure: weighted spatial average of zone position by load,
+  // same formula as the clinical spec (CoP_x = sum(F_i * x_i) / sum(F_i)).
+  // Accumulated as a side effect during the .map below (same pattern the
+  // existing `total` already uses) - read after the map has run, since JSX
+  // sibling expressions evaluate in source order before render.
+  let copWX = 0, copWY = 0
+  const COP_MIN_LOAD = 100   // below this, division is unstable/meaningless - hide the dot
   return (
     <div className="foot">
       <div className="foot-label">{side} <StatusPill ok={ok} /></div>
@@ -56,14 +66,19 @@ function Foot({ side, zones, data, fullScale, resetKey }) {
           total += val
           const cx = z.x * W
           const cy = (1 - z.y) * H
+          copWX += cx * val
+          copWY += cy * val
           const anat = !!z.anatomy
           return (
             <circle key={ch} cx={cx} cy={cy} r={anat ? 14 : 12}
               fill={pressureColor(val / fullScale)} className="zone"
-              stroke={anat ? '#ffffff55' : '#00000055'} />
+              stroke={anat ? '#8b96a599' : '#8b96a533'} />
           )
         }) : (
           <text x={W / 2} y={H / 2} textAnchor="middle" className="foot-off">not connected</text>
+        )}
+        {ok && total > COP_MIN_LOAD && (
+          <circle cx={copWX / total} cy={copWY / total} r={5} className="cop-dot" />
         )}
       </svg>
       <div className="foot-load">{ok ? `load ${Math.round(total)}` : '—'}</div>

@@ -13,12 +13,15 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 // each loaded skeleton's actual bone names rather than assuming.
 const BONE = {
   hips: ['mixamorigHips', 'mixamorig:Hips'],
+  spine: ['mixamorigSpine', 'mixamorig:Spine'],
   leftHip: ['mixamorigLeftUpLeg', 'mixamorig:LeftUpLeg'],
   rightHip: ['mixamorigRightUpLeg', 'mixamorig:RightUpLeg'],
   leftKnee: ['mixamorigLeftLeg', 'mixamorig:LeftLeg'],
   rightKnee: ['mixamorigRightLeg', 'mixamorig:RightLeg'],
   leftFoot: ['mixamorigLeftFoot', 'mixamorig:LeftFoot'],
   rightFoot: ['mixamorigRightFoot', 'mixamorig:RightFoot'],
+  leftArm: ['mixamorigLeftArm', 'mixamorig:LeftArm'],
+  rightArm: ['mixamorigRightArm', 'mixamorig:RightArm'],
 }
 
 // Local axis each bone bends about, in ITS OWN rest-pose local space. Found by
@@ -36,14 +39,39 @@ const KNEE_SIGN = 1
 const HIP_FLEX_AXIS = new THREE.Vector3(1, 0, 0)
 const HIP_FLEX_SIGN = 1
 
+// Upper body follows the same hip-tilt lean, at a fraction of the angle -
+// a real torso doesn't rigidly copy the pelvis 1:1, it continues the lean
+// more gently up the spine. Only meaningful now that hipTiltDeg is the real
+// SIGNED value (see calibrateHipTilt in useMetrics.js) - this was NOT worth
+// adding while hip tilt was unsigned, since it would've just doubled down on
+// the "only ever leans one way" bug on two bones instead of one.
+const TORSO_LEAN_FRACTION = 0.5
+
 // There's no ankle IMU, so the foot has no measured angle - only a contact
 // PHASE from the feet FSRs (useMetrics: footPhaseL/R, derived from the
-// heel-specific channels). This is a bounded visual cue for foot clearance
-// during swing, not a calibrated kinematic reading; it eases toward a target
-// pitch each frame rather than snapping, so it reads as motion, not a glitch.
+// heel/toe-specific channels). This is a bounded visual cue, not a
+// calibrated kinematic reading; it eases toward a target pitch each frame
+// rather than snapping, so it reads as motion, not a glitch. Three phases:
+// 'stance' (flat), 'swing' (heel unloaded - foot lifted, toes up for
+// clearance), 'heel-only' (heel loaded but toes lifted - rocked back onto
+// the heel while the foot stays down) - a bigger toe-up angle than swing so
+// the two are visually distinguishable, not just numerically different.
 const FOOT_AXIS = new THREE.Vector3(1, 0, 0)
 const SWING_TOE_UP_DEG = 18
+const HEEL_ONLY_TOE_UP_DEG = 32
 const FOOT_EASE_PER_SEC = 10
+
+// No arm sensors exist, so this is a static rest-pose correction, not a
+// measured reading: Mixamo characters load in a T-pose (arms straight out),
+// which reads as broken/robotic on a standing avatar. Rotating each arm bone
+// brings it down to the character's side instead. First attempt used the Z
+// axis and produced NO visible movement; switched to X (confirmed working
+// for KNEE_AXIS/HIP_FLEX_AXIS) which DID move the arms, but the sign was
+// backwards - arms went straight UP instead of down (seen live, not
+// guessed). Signs below are now flipped to match. Opposite per side because
+// bind pose left/right.
+const ARM_DOWN_AXIS = new THREE.Vector3(1, 0, 0)
+const ARM_DOWN_DEG = 75
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
 // loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
@@ -79,10 +107,16 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       const q = new THREE.Quaternion().setFromAxisAngle(KNEE_AXIS, bend)
       b.rightKnee.quaternion.copy(rest.rightKnee).multiply(q)
     }
-    if (b.hips && rest.hips && hipTiltDeg != null) {
-      const tilt = THREE.MathUtils.degToRad(Math.min(30, hipTiltDeg))
-      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tilt)
-      b.hips.quaternion.copy(rest.hips).multiply(q)
+    if (hipTiltDeg != null) {
+      const clamped = THREE.MathUtils.clamp(hipTiltDeg, -30, 30)
+      if (b.hips && rest.hips) {
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped))
+        b.hips.quaternion.copy(rest.hips).multiply(q)
+      }
+      if (b.spine && rest.spine) {
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped * TORSO_LEAN_FRACTION))
+        b.spine.quaternion.copy(rest.spine).multiply(q)
+      }
     }
     if (b.leftHip && rest.leftHip) {
       const flex = THREE.MathUtils.degToRad(Math.max(0, hipFlexLDeg ?? 0)) * HIP_FLEX_SIGN
@@ -96,7 +130,11 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     }
 
     const ease = 1 - Math.exp(-FOOT_EASE_PER_SEC * delta)
-    const targetDeg = (phase) => (phase === 'swing' ? SWING_TOE_UP_DEG : 0)
+    const targetDeg = (phase) => {
+      if (phase === 'swing') return SWING_TOE_UP_DEG
+      if (phase === 'heel-only') return HEEL_ONLY_TOE_UP_DEG
+      return 0
+    }
     footAngle.current.left += (targetDeg(footPhaseL) - footAngle.current.left) * ease
     footAngle.current.right += (targetDeg(footPhaseR) - footAngle.current.right) * ease
     if (b.leftFoot && rest.leftFoot) {
@@ -106,6 +144,15 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     if (b.rightFoot && rest.rightFoot) {
       const q = new THREE.Quaternion().setFromAxisAngle(FOOT_AXIS, THREE.MathUtils.degToRad(footAngle.current.right))
       b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
+    }
+
+    if (b.leftArm && rest.leftArm) {
+      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(-ARM_DOWN_DEG))
+      b.leftArm.quaternion.copy(rest.leftArm).multiply(q)
+    }
+    if (b.rightArm && rest.rightArm) {
+      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(ARM_DOWN_DEG))
+      b.rightArm.quaternion.copy(rest.rightArm).multiply(q)
     }
   })
 }

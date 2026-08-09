@@ -11,7 +11,7 @@ export default function Ring({
   const mid = size / 2
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="ring">
-      <circle cx={mid} cy={mid} r={r} fill="none" stroke="#ffffff14" strokeWidth="14" />
+      <circle cx={mid} cy={mid} r={r} fill="none" style={{ stroke: 'var(--line)' }} strokeWidth="14" />
       <circle
         cx={mid} cy={mid} r={r} fill="none"
         stroke={reached ? '#3ddc84' : color} strokeWidth="14" strokeLinecap="round"

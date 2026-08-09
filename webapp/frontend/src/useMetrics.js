@@ -25,6 +25,19 @@ const FEET_SETTLE_S = 2      // after a foot reconnects, the baseline hasn't yet
 // release) avoids chatter right at the threshold.
 const HEEL_STANCE_ON = 150   // heel load above this -> stance (foot down)
 const HEEL_STANCE_OFF = 50   // heel load below this -> swing (foot lifted)
+// Third state, same idea: heel loaded but TOES unloaded means the foot is
+// still down but rocked back onto the heel (toes deliberately lifted), not
+// mid-swing (heel unloaded/foot off the ground). Own hysteresis band so it
+// doesn't chatter against 'stance' right at the threshold, same as heel's.
+const TOE_LOAD_ON = 150      // toe load above this -> flat/stance
+const TOE_LOAD_OFF = 50      // toe load below this -> heel-only
+
+// Gait timing (stance/swing/double-support %, cadence, symmetry). Stance %
+// is an exponential moving average, not a fixed-window average over stored
+// samples - cheap, self-forgetting of old data, and settles to the true
+// rolling percentage within about GAIT_PCT_WINDOW_S seconds either way.
+const GAIT_PCT_WINDOW_S = 8
+const STRIDE_BUF_MAX = 6     // recent heel-strikes kept per foot for cadence
 
 // Per-rep form checks, evaluated once a rep completes. Thresholds follow the
 // same "error tolerance" idea used in knee-OA rehab literature (e.g. Chen et
@@ -63,10 +76,15 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // combined metric (e.g. balance needing both feet).
     bufHipL: [], bufHipR: [], calHipL: null, calHipR: null,
     calPhaseHip: 'idle', calCaptureHipL: null, calCaptureHipR: null, calMsgHip: '',
-    footLayout: null, heelBaseL: {}, heelBaseR: {},
+    footLayout: null, heelBaseL: {}, heelBaseR: {}, toeBaseL: {}, toeBaseR: {},
     footPhaseL: 'stance', footPhaseR: 'stance',
-    repPeakL: 0, repPeakHipL: 0, repStartTL: null, formFlagL: '',
-    repPeakR: 0, repPeakHipR: 0, repStartTR: null, formFlagR: '',
+    repPeakL: 0, repPeakHipL: 0, repStartTL: null, formFlagL: '', lastRepPeakL: null,
+    repPeakR: 0, repPeakHipR: 0, repStartTR: null, formFlagR: '', lastRepPeakR: null,
+    // Gait timing: EMA of "in stance" per foot (see GAIT_PCT_WINDOW_S), plus
+    // recent heel-strike timestamps per foot for cadence. lastTickT lets the
+    // EMA use real elapsed time (dt) instead of assuming a fixed tick rate.
+    lastTickT: null, stancePctL: 100, stancePctR: 100, dsPct: 100,
+    heelStrikeTimesL: [], heelStrikeTimesR: [],
     // Two physically different insole boards rarely have matched raw
     // sensitivity (FSR batch/wiring variance) - comparing raw baseline-
     // subtracted sums directly can skew the balance split even with a
@@ -75,6 +93,16 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // evenly (assumed 50/50 - the only reference this software has).
     balScaleR: 1, lastLoadL: null, lastLoadR: null, calMsgBalance: '',
     feetSettleUntilT: null,
+    // hip TILT direction calibration: hipTilt (via quat.js tiltDeg) is
+    // deliberately unsigned - fine for the "how far off level" ring, useless
+    // for the gait avatar which needs a real left/right direction to rotate
+    // correctly. Same two-click axis-measurement idea as knee/hip-flexion,
+    // but against a single sensor's own captured reference (no second body
+    // to take a relative orientation against) - lean one fixed direction
+    // (right) during calibration so the measured axis's sign convention is
+    // deterministic: positive = leaning right from then on.
+    bufHipTilt: [], calHipTilt: null,
+    calPhaseHipTilt: 'idle', calCaptureHipTilt: null, calMsgHipTilt: '',
   })
   const [m, setM] = useState(null)
 
@@ -122,33 +150,95 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.lastLoadL = lOk ? loadL : null
     s.lastLoadR = rOk ? loadRraw : null
 
-    // Heel-specific load (subset of channels, not the whole-foot total) drives
-    // stance/swing phase for the gait avatar's feet.
-    const heelLoad = (side, arr, base) => {
+    // Heel/toe-specific load (subset of channels, not the whole-foot total)
+    // drives stance/swing/heel-only phase for the gait avatar's feet.
+    const zoneLoad = (side, arr, base, anatomy) => {
       const zones = s.footLayout?.[side]
       if (!arr || !zones) return null
       let sum = 0
       for (const [ch, z] of Object.entries(zones)) {
-        if (z.anatomy !== 'heel') continue
+        if (z.anatomy !== anatomy) continue
         const v = arr[Number(ch)] ?? 0
         base[ch] = base[ch] == null ? v : Math.min(base[ch], v)
         sum += Math.max(0, v - base[ch])
       }
       return sum
     }
-    const heelL = lOk ? heelLoad('left', feet.left.c, s.heelBaseL) : null
-    const heelR = rOk ? heelLoad('right', feet.right.c, s.heelBaseR) : null
-    if (heelL != null) {
-      if (s.footPhaseL === 'swing' && heelL > HEEL_STANCE_ON) s.footPhaseL = 'stance'
-      else if (s.footPhaseL === 'stance' && heelL < HEEL_STANCE_OFF) s.footPhaseL = 'swing'
+    const heelL = lOk ? zoneLoad('left', feet.left.c, s.heelBaseL, 'heel') : null
+    const heelR = rOk ? zoneLoad('right', feet.right.c, s.heelBaseR, 'heel') : null
+    const toeL = lOk ? zoneLoad('left', feet.left.c, s.toeBaseL, 'toe') : null
+    const toeR = rOk ? zoneLoad('right', feet.right.c, s.toeBaseR, 'toe') : null
+
+    // Heel unloading always wins (foot coming off the ground entirely, mid-
+    // swing) regardless of toe state. Among heel-loaded states, toe load
+    // decides flat stance vs. rocked back on the heel only.
+    const nextFootPhase = (phase, heel, toe) => {
+      if (heel == null) return phase
+      if (phase !== 'swing' && heel < HEEL_STANCE_OFF) return 'swing'
+      if (phase === 'swing' && heel > HEEL_STANCE_ON) {
+        return (toe != null && toe < TOE_LOAD_OFF) ? 'heel-only' : 'stance'
+      }
+      if (phase === 'stance' && toe != null && toe < TOE_LOAD_OFF) return 'heel-only'
+      if (phase === 'heel-only' && toe != null && toe > TOE_LOAD_ON) return 'stance'
+      return phase
     }
-    if (heelR != null) {
-      if (s.footPhaseR === 'swing' && heelR > HEEL_STANCE_ON) s.footPhaseR = 'stance'
-      else if (s.footPhaseR === 'stance' && heelR < HEEL_STANCE_OFF) s.footPhaseR = 'swing'
+    const prevPhaseL = s.footPhaseL
+    const prevPhaseR = s.footPhaseR
+    s.footPhaseL = nextFootPhase(s.footPhaseL, heelL, toeL)
+    s.footPhaseR = nextFootPhase(s.footPhaseR, heelR, toeR)
+
+    // Heel strike = the moment a foot leaves 'swing' (heel just made contact
+    // again), regardless of whether it lands as 'stance' or 'heel-only'.
+    if (prevPhaseL === 'swing' && s.footPhaseL !== 'swing') {
+      s.heelStrikeTimesL.push(snap.t)
+      if (s.heelStrikeTimesL.length > STRIDE_BUF_MAX) s.heelStrikeTimesL.shift()
     }
+    if (prevPhaseR === 'swing' && s.footPhaseR !== 'swing') {
+      s.heelStrikeTimesR.push(snap.t)
+      if (s.heelStrikeTimesR.length > STRIDE_BUF_MAX) s.heelStrikeTimesR.shift()
+    }
+
+    // Rolling stance/double-support % via EMA (see GAIT_PCT_WINDOW_S above).
+    // Guards against a huge dt (reconnect gap, tab backgrounded) skewing the
+    // average in one jump - just skip the update for that one tick instead.
+    const dt = s.lastTickT != null ? snap.t - s.lastTickT : 0
+    s.lastTickT = snap.t
+    if (dt > 0 && dt < 1) {
+      const ease = 1 - Math.exp(-dt / GAIT_PCT_WINDOW_S)
+      if (lOk) s.stancePctL += ((s.footPhaseL !== 'swing' ? 100 : 0) - s.stancePctL) * ease
+      if (rOk) s.stancePctR += ((s.footPhaseR !== 'swing' ? 100 : 0) - s.stancePctR) * ease
+      if (lOk && rOk) {
+        const inDS = (s.footPhaseL !== 'swing' && s.footPhaseR !== 'swing') ? 100 : 0
+        s.dsPct += (inDS - s.dsPct) * ease
+      }
+    }
+
+    // Cadence from average stride time (heel-strike to next same-foot heel-
+    // strike), combining both feet - matches the "x2 for both legs" formula.
+    const avgInterval = (times) => {
+      if (times.length < 2) return null
+      let sum = 0
+      for (let i = 1; i < times.length; i++) sum += times[i] - times[i - 1]
+      return sum / (times.length - 1)
+    }
+    const strideL = lOk ? avgInterval(s.heelStrikeTimesL) : null
+    const strideR = rOk ? avgInterval(s.heelStrikeTimesR) : null
+    const strides = [strideL, strideR].filter((v) => v != null && v > 0.2 && v < 5)
+    const avgStrideS = strides.length ? strides.reduce((a, b) => a + b, 0) / strides.length : null
+    const cadence = avgStrideS ? (60 / avgStrideS) * 2 : null
 
     if (s.hipRef == null && hipOk) s.hipRef = hip.q
     const hipTilt = hipOk && s.hipRef ? tiltDeg(s.hipRef, hip.q) : null
+
+    // Rolling buffer for the hip-tilt DIRECTION calibration below - just the
+    // pelvis's own orientation, no knee board needed (unlike hip flexion).
+    if (hipOk) {
+      s.bufHipTilt.push(hip.q)
+      if (s.bufHipTilt.length > CAL_BUF_MAX) s.bufHipTilt.shift()
+    }
+    const hipTiltSigned = (hipOk && s.calHipTilt)
+      ? angleAboutAxisDeg(qcanon(qrelative(s.calHipTilt.qNeutral, hip.q)), s.calHipTilt.axis)
+      : null
 
     // Rolling raw-quaternion buffer per side, for calibration capture clicks.
     if (kneeLOk) {
@@ -212,6 +302,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
         if (hipOk && Math.abs(hipTilt) > s.repPeakHipL) s.repPeakHipL = Math.abs(hipTilt)
         if (kneeLAngle < 15) {
           s.phaseL = 'down'; s.repsL += 1
+          s.lastRepPeakL = s.repPeakL
           const duration = s.repStartTL != null ? snap.t - s.repStartTL : null
           s.formFlagL = judgeForm(s.repPeakL, s.repPeakHipL, duration)
         }
@@ -228,11 +319,45 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
         if (hipOk && Math.abs(hipTilt) > s.repPeakHipR) s.repPeakHipR = Math.abs(hipTilt)
         if (kneeRAngle < 15) {
           s.phaseR = 'down'; s.repsR += 1
+          s.lastRepPeakR = s.repPeakR
           const duration = s.repStartTR != null ? snap.t - s.repStartTR : null
           s.formFlagR = judgeForm(s.repPeakR, s.repPeakHipR, duration)
         }
       }
     }
+
+    // Symmetry Index: SI = |X_L - X_R| / (0.5*(X_L+X_R)) * 100, per Robinson
+    // et al. (1987) - standard clinical gait-symmetry formula. Computed on
+    // two parameters: rolling stance-time % (from the gait timing above) and
+    // peak knee flexion from each side's most recently COMPLETED rep (not
+    // the in-progress one, which is mid-bend and not a fair comparison).
+    // Both null until there's a real value on both sides to compare.
+    const symmetryIndex = (xl, xr) => {
+      if (xl == null || xr == null) return null
+      const denom = 0.5 * (xl + xr)
+      return denom === 0 ? null : Math.abs(xl - xr) / denom * 100
+    }
+    const siStance = (lOk && rOk) ? symmetryIndex(s.stancePctL, s.stancePctR) : null
+    const siKneeFlex = symmetryIndex(s.lastRepPeakL, s.lastRepPeakR)
+    const siValues = [siStance, siKneeFlex].filter((v) => v != null)
+    const symmetryIndexOverall = siValues.length ? siValues.reduce((a, b) => a + b, 0) / siValues.length : null
+
+    // Rehab Score: an equally-weighted composite of the factors we can
+    // actually derive right now (symmetry, ROM achievement, gait-phase
+    // health) - NOT a validated clinical index, just a single at-a-glance
+    // number for the patient view. A factor with no data yet is left out of
+    // the average rather than dragging the score down for missing data.
+    const scoreParts = []
+    if (symmetryIndexOverall != null) scoreParts.push(Math.max(0, 100 - symmetryIndexOverall))
+    if (s.lastRepPeakL != null || s.lastRepPeakR != null) {
+      const bestPeak = Math.max(s.lastRepPeakL ?? 0, s.lastRepPeakR ?? 0)
+      scoreParts.push(kneeTarget > 0 ? Math.min(100, (bestPeak / kneeTarget) * 100) : 0)
+    }
+    if (lOk || rOk) {
+      const avgStancePct = lOk && rOk ? (s.stancePctL + s.stancePctR) / 2 : (lOk ? s.stancePctL : s.stancePctR)
+      scoreParts.push(Math.max(0, 100 - Math.abs(avgStancePct - 60) * 4))  // full score at the ~60% healthy stance figure
+    }
+    const rehabScore = scoreParts.length ? Math.round(scoreParts.reduce((a, b) => a + b, 0) / scoreParts.length) : null
 
     s.hist.push({
       t: snap.t, kneeL: kneeLAngle, kneeR: kneeRAngle, hip: hipTilt, loadL, loadR,
@@ -242,6 +367,8 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
 
     setM({
       kneeLAngle, kneeLOk, kneeRAngle, kneeROk, hipTilt, hipOk,
+      hipTiltSigned, hipTiltCalibrated: !!s.calHipTilt,
+      calPhaseHipTilt: s.calPhaseHipTilt, calMsgHipTilt: s.calMsgHipTilt,
       loadL, loadR, lOk, rOk,
       feetSettling: s.feetSettleUntilT != null && snap.t < s.feetSettleUntilT,
       footPhaseL: lOk ? s.footPhaseL : null, footPhaseR: rOk ? s.footPhaseR : null,
@@ -256,6 +383,13 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       calibratedL: !!s.calL, calibratedR: !!s.calR,
       calPhaseL: s.calPhaseL, calMsgL: s.calMsgL,
       calPhaseR: s.calPhaseR, calMsgR: s.calMsgR,
+      // Performance metrics (gait timing, symmetry, composite score) - see
+      // the comment block above s.hist.push for how each is derived.
+      stancePctL: lOk ? s.stancePctL : null, stancePctR: rOk ? s.stancePctR : null,
+      swingPctL: lOk ? 100 - s.stancePctL : null, swingPctR: rOk ? 100 - s.stancePctR : null,
+      doubleSupportPct: (lOk && rOk) ? s.dsPct : null,
+      cadence, siStance, siKneeFlex, symmetryIndexOverall, rehabScore,
+      lastRepPeakL: s.lastRepPeakL, lastRepPeakR: s.lastRepPeakR,
     })
   }, [snap?.t, kneeTarget])
 
@@ -397,5 +531,42 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     s.calMsgHip = results.length ? results.join(', ') : 'Movement too small - hold each pose still and try again'
   }
 
-  return { m, zeroHip, zeroFeet, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateBalance }
+  // Two-click flow like the others, but against a SINGLE sensor's own
+  // captured reference (no second body to relate it to): first click
+  // captures "level" as neutral, second click (after leaning RIGHT - a fixed
+  // direction so the sign convention is deterministic) derives the real
+  // left/right axis from the rotation between them. Fixes hipTilt's
+  // unsigned-by-design limitation (see tiltDeg in quat.js) for anything that
+  // needs an actual direction, like the gait avatar's pelvis/torso rotation.
+  const calibrateHipTilt = () => {
+    const s = S.current
+    if (s.bufHipTilt.length < 3) {
+      s.calMsgHipTilt = 'Waiting for hip sensor data - try again in a moment'
+      return
+    }
+    if (s.calPhaseHipTilt === 'idle') {
+      s.calCaptureHipTilt = qaverage(s.bufHipTilt)
+      s.calPhaseHipTilt = 'awaiting-lean'
+      s.calMsgHipTilt = 'Now lean to your RIGHT and hold still, then click again'
+      return
+    }
+    const level = s.calCaptureHipTilt
+    s.calPhaseHipTilt = 'idle'
+    s.calCaptureHipTilt = null
+    if (!level) {
+      s.calMsgHipTilt = 'Sensor dropped mid-capture - try again'
+      return
+    }
+    const leaned = qaverage(s.bufHipTilt)
+    const qOffset = qrelative(level, leaned)
+    const { axis, angleDeg } = axisAngle(qcanon(qOffset))
+    if (angleDeg < MIN_BEND_DEG) {
+      s.calMsgHipTilt = 'Lean too small - hold each pose still and try again'
+      return
+    }
+    s.calHipTilt = { qNeutral: level, axis }
+    s.calMsgHipTilt = 'Calibrated'
+  }
+
+  return { m, zeroHip, zeroFeet, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateHipTilt, calibrateBalance }
 }
