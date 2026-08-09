@@ -94,7 +94,7 @@ export default function App() {
       {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} actions={actions} />}
       {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} actions={actions} />}
       {tab === 'gait' && <GaitView m={m} />}
-      {tab === 'session' && <ActuationPanel m={m} />}
+      {tab === 'session' && <ActuationPanel m={m} session={session} />}
 
       <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
     </div>

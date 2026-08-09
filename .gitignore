@@ -19,6 +19,9 @@ hugadb/
 # Exports / build artifacts
 *.pdf
 
+# Local runtime data (regenerated, not source - see webapp/backend/sessions.py)
+webapp/backend/sessions.db
+
 # OS / editor cruft
 Thumbs.db
 .DS_Store

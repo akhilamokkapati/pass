@@ -36,7 +36,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ingest
+from . import ingest, sessions
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 FRONTEND_DIST = REPO / "webapp" / "frontend" / "dist"
@@ -73,7 +73,9 @@ async def _startup() -> None:
 async def _broadcaster() -> None:
     while True:
         if _clients:
-            msg = json.dumps(ingest.snapshot())
+            payload = ingest.snapshot()
+            payload["actuationRecommendation"] = sessions.get_pending_recommendation()
+            msg = json.dumps(payload)
             for ws in list(_clients):
                 try:
                     await ws.send_text(msg)
@@ -124,6 +126,46 @@ async def api_actuation_pending(request: Request) -> dict:
     if not RELAY_KEY or request.headers.get("x-relay-key") != RELAY_KEY:
         raise HTTPException(status_code=403, detail="bad or missing relay key")
     return {"commands": ingest.drain_commands()}
+
+
+@app.post("/api/actuation/session")
+async def api_actuation_session(request: Request) -> dict:
+    """Log one finished session (ActuationPanel.jsx calls this from both a
+    normal Stop and a mid-exercise Force Stop) and recompute the next-weight
+    recommendation from it. kgOptions comes from the request rather than
+    being hardcoded here, so the preset list has one source of truth (the
+    frontend's KG_OPTIONS) instead of two copies that can drift apart."""
+    body = await request.json()
+    try:
+        record = sessions.log_session(
+            target_kg=float(body["target"]), duration_s=float(body["durationS"]),
+            peak_kg=float(body["peak"]), avg_kg=float(body["avg"]),
+            samples=int(body["samples"]), completed=bool(body["completed"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"bad session payload: {exc}")
+    kg_options = body.get("kgOptions") or []
+    recommendation = sessions.refresh_recommendation(kg_options) if kg_options else None
+    return {"session": record, "recommendation": recommendation}
+
+
+@app.get("/api/actuation/sessions")
+async def api_actuation_sessions(limit: int = 50) -> dict:
+    return {"sessions": sessions.get_sessions(limit=limit)}
+
+
+@app.post("/api/actuation/recommendation/respond")
+async def api_actuation_recommendation_respond(request: Request) -> dict:
+    """Clinician approves or rejects the pending recommendation. The result
+    is picked up by every connected client (patient included) on the next
+    broadcast tick via actuationRecommendation in the live snapshot - no
+    separate patient-notification channel needed."""
+    body = await request.json()
+    approved = bool(body.get("approved"))
+    result = sessions.respond_to_recommendation(approved)
+    if result is None:
+        raise HTTPException(status_code=409, detail="no recommendation is currently pending")
+    return {"recommendation": result}
 
 
 @app.websocket("/ws")

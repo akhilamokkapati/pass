@@ -454,6 +454,10 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       calMsgBalance: s.calMsgBalance,
       actuationOk, actuationTension: actuationOk ? actuation.tension_n : null,
       actuationState: actuationOk ? actuation.state : null,
+      // Not gated on actuationOk - this is clinician/patient workflow state
+      // (pending/approved/rejected weight suggestion), independent of
+      // whether the board itself currently has a live link.
+      actuationRecommendation: snap.actuationRecommendation ?? null,
       anyLive: kneeLOk || kneeROk || hipOk || lOk || rOk,
       calibratedL: !!s.calL, calibratedR: !!s.calR,
       calPhaseL: s.calPhaseL, calMsgL: s.calMsgL,
