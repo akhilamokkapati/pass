@@ -109,21 +109,13 @@ export default function CalibrateAllBar({ m, actions }) {
     )
   }
 
+  // Once running, this takes over as a full-screen modal instead of the
+  // small inline bar - the instructions/pose prompts need to be readable
+  // from a few feet away (that's the whole point of walking through this
+  // hands-free), not squeezed into the same row as the connection banner.
   const done = stepIdx >= steps.length
-  if (done) {
-    return (
-      <div className="cal-all-bar cal-all-active">
-        <div className="cal-all-body">
-          <div className="cal-all-title">All done</div>
-          <div className="cue">Ran calibration for: {steps.map((s) => s.label).join(', ')}.</div>
-        </div>
-        <button className="btn ghost" onClick={close}>Close</button>
-      </div>
-    )
-  }
-
-  const step = steps[stepIdx]
-  const capturing = clickCount < step.prompts.length
+  const step = done ? null : steps[stepIdx]
+  const capturing = step ? clickCount < step.prompts.length : false
   const next = () => {
     if (capturing) {
       step.run(actions)
@@ -136,15 +128,28 @@ export default function CalibrateAllBar({ m, actions }) {
   const retry = () => setClickCount(0)
 
   return (
-    <div className="cal-all-bar cal-all-active">
-      <div className="cal-all-body">
-        <div className="cal-all-title">Calibrate all - step {stepIdx + 1} of {steps.length}: {step.label}</div>
-        <div className="cue">{capturing ? step.prompts[clickCount] : (step.result(m) || 'Captured.')}</div>
-      </div>
-      <div className="cal-all-actions">
-        {!capturing && <button className="btn ghost" onClick={retry}>Retry</button>}
-        <button className="btn download" onClick={next}>{capturing ? 'Next' : 'Continue'}</button>
-        <button className="btn ghost" onClick={close}>Cancel</button>
+    <div className="cal-all-overlay">
+      <div className="cal-all-modal">
+        {done ? (
+          <>
+            <div className="cal-all-title">All done</div>
+            <div className="cal-all-prompt">Ran calibration for: {steps.map((s) => s.label).join(', ')}.</div>
+            <div className="cal-all-actions">
+              <button className="btn download" onClick={close}>Close</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="cal-all-progress">Step {stepIdx + 1} of {steps.length}</div>
+            <div className="cal-all-title">{step.label}</div>
+            <div className="cal-all-prompt">{capturing ? step.prompts[clickCount] : (step.result(m) || 'Captured.')}</div>
+            <div className="cal-all-actions">
+              {!capturing && <button className="btn ghost" onClick={retry}>Retry</button>}
+              <button className="btn download" onClick={next}>{capturing ? 'Next' : 'Continue'}</button>
+              <button className="btn ghost" onClick={close}>Cancel</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
