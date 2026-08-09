@@ -47,6 +47,20 @@ export default function App() {
   // silently drifting apart from the balance bar's zero point.
   const [feetZeroEpoch, setFeetZeroEpoch] = useState(0)
 
+  // Browser tab title tracks whichever tab is actually showing, so switching
+  // tabs (or checking a background tab) doesn't leave a stale "PASS — Live"
+  // title from first load. Falls back to that same default pre-login, where
+  // there's no tab to name yet.
+  useEffect(() => {
+    if (!session) { document.title = 'PASS — Live'; return }
+    const label = tab === 'home' ? (session.role === 'clinician' ? 'Clinician' : 'Patient')
+      : tab === 'gait' ? 'Gait'
+      : tab === 'session' ? 'Session'
+      : tab === 'logs' ? 'Logs'
+      : 'Live'
+    document.title = `PASS — ${label}`
+  }, [tab, session])
+
   // Periodic sensor snapshot log (webapp/backend/sensor_log.py), shown on the
   // Logs tab - separate from the actuation session log, which is discrete
   // Start/Stop sessions instead of a fixed-interval reading. mRef keeps the
