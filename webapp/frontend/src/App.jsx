@@ -9,6 +9,7 @@ import GaitView from './GaitView.jsx'
 import DevicesPanel from './DevicesPanel.jsx'
 import ActuationPanel from './ActuationPanel.jsx'
 import SensorLogView from './SensorLogView.jsx'
+import CalibrateAllBar from './CalibrateAllBar.jsx'
 
 const KNEE_TARGET = 60
 const THEME_KEY = 'pass_theme'
@@ -118,12 +119,14 @@ export default function App() {
 
       <DevicesPanel snap={snap} />
 
-      {!anyLive && (
+      {!anyLive ? (
         <div className="empty">
           <span className="empty-dot" />
           <div><b>No sensors connected.</b> Power on a node (feet, knee, or hip) on the
             30.007 network and live data appears here automatically.</div>
         </div>
+      ) : (
+        <CalibrateAllBar m={m} actions={actions} />
       )}
 
       {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} actions={actions} />}

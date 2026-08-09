@@ -148,6 +148,18 @@ body {
 .empty b { color: var(--text); }
 .empty-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--off); flex: none; box-shadow: 0 0 0 4px var(--surface-2); }
 
+/* ---- calibrate-all bar (same row as the empty banner, shown once any sensor is live) ---- */
+.cal-all-bar {
+  display: flex; align-items: center; gap: 14px; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 14px; padding: 12px 18px; margin-bottom: 16px;
+}
+.cal-all-bar .btn { margin-top: 0; }
+.cal-all-bar .cue { margin-top: 0; }
+.cal-all-active { flex-wrap: wrap; justify-content: space-between; }
+.cal-all-body { flex: 1 1 320px; min-width: 0; }
+.cal-all-title { font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.cal-all-actions { display: flex; gap: 8px; flex: none; }
+
 /* ---- cards ---- */
 .card {
   background: linear-gradient(180deg, var(--panel), var(--panel-2));
