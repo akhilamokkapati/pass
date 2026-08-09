@@ -64,14 +64,28 @@ const FOOT_EASE_PER_SEC = 10
 // No arm sensors exist, so this is a static rest-pose correction, not a
 // measured reading: Mixamo characters load in a T-pose (arms straight out),
 // which reads as broken/robotic on a standing avatar. Rotating each arm bone
-// brings it down to the character's side instead. First attempt used the Z
-// axis and produced NO visible movement; switched to X (confirmed working
-// for KNEE_AXIS/HIP_FLEX_AXIS) which DID move the arms, but the sign was
-// backwards - arms went straight UP instead of down (seen live, not
-// guessed). Signs below are now flipped to match. Opposite per side because
-// bind pose left/right.
-const ARM_DOWN_AXIS = new THREE.Vector3(1, 0, 0)
-const ARM_DOWN_DEG = 75
+// brings it down to the character's side instead.
+//
+// Derived from the actual Xbot.glb bind pose (parsed the GLB's JSON chunk
+// directly): every bone's local rotation in the rest pose is identity - the
+// T-pose shape comes entirely from translation offsets between bones, not
+// rotation. LeftForeArm sits at ~[27.8, 0, 0] relative to LeftArm, i.e. the
+// arm rests pointing along local/world +X (RightArm along -X).
+//
+// Two hand-derived axis/angle attempts both produced visibly wrong results
+// live (X axis: diagonal fling; Z axis 90deg: arms swung down but crossed in
+// toward the pelvis instead of staying at the sides - manual axis/sign
+// reasoning kept introducing error). Switched to computing the rotation
+// directly with setFromUnitVectors(restDirection, targetDirection): this
+// finds the exact minimal rotation between the two vectors instead of
+// requiring the axis/angle to be derived and verified by hand, removing that
+// whole class of mistake. Target is straight down (0,-1,0), i.e. hanging at
+// the sides.
+const ARM_REST_DIR_LEFT = new THREE.Vector3(1, 0, 0)
+const ARM_REST_DIR_RIGHT = new THREE.Vector3(-1, 0, 0)
+const ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
+const ARM_DOWN_QUAT_LEFT = new THREE.Quaternion().setFromUnitVectors(ARM_REST_DIR_LEFT, ARM_TARGET_DIR)
+const ARM_DOWN_QUAT_RIGHT = new THREE.Quaternion().setFromUnitVectors(ARM_REST_DIR_RIGHT, ARM_TARGET_DIR)
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
 // loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
@@ -147,12 +161,10 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     }
 
     if (b.leftArm && rest.leftArm) {
-      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(-ARM_DOWN_DEG))
-      b.leftArm.quaternion.copy(rest.leftArm).multiply(q)
+      b.leftArm.quaternion.copy(rest.leftArm).multiply(ARM_DOWN_QUAT_LEFT)
     }
     if (b.rightArm && rest.rightArm) {
-      const q = new THREE.Quaternion().setFromAxisAngle(ARM_DOWN_AXIS, THREE.MathUtils.degToRad(ARM_DOWN_DEG))
-      b.rightArm.quaternion.copy(rest.rightArm).multiply(q)
+      b.rightArm.quaternion.copy(rest.rightArm).multiply(ARM_DOWN_QUAT_RIGHT)
     }
   })
 }

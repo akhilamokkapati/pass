@@ -2,23 +2,24 @@
 // Mixamo skeleton naming (mixamorig:Hips/LeftLeg/RightLeg after GLTFLoader
 // strips the colon), so GaitAvatar's bone-lookup and rest-pose rotation logic
 // works unchanged for any of them - only the model file differs.
+//
+// Trimmed from 9 to these 3 after checking each against a forced asymmetric
+// test pose (bent-knee/tilted-hip/lifted-foot, independent of live sensor
+// data - see GaitView.jsx history). Soldier, Big Vegas, Brute, Arissa, Ch14,
+// and Maw J Laygo were removed: Big Vegas/Brute/Arissa showed no visible
+// response at all (straight/idle legs - the rig likely doesn't share this
+// skeleton's naming, same failure class as Ch16_nonPBR below), and
+// Soldier/Maw J Laygo/Ch14 responded but with a distorted, twisted result
+// that isn't trustworthy for actual clinical use. Xbot and Marker Man showed
+// a clean asymmetric bend matching the test values; Michelle's legs did too
+// (her arm rest-pose is still off, a separate known issue - see ARM_DOWN_QUAT
+// in GaitAvatar.jsx, but that's cosmetic only and doesn't affect the knee
+// reading itself).
 export const GAIT_MODELS = [
   { id: 'xbot', label: 'Xbot', path: '/Xbot.glb' },
   { id: 'michelle', label: 'Michelle', path: '/Michelle.glb' },
-  { id: 'soldier', label: 'Soldier', path: '/Soldier.glb' },
-  // FBX imports (Mixamo characters). Mixamo FBX exports are authored in
+  // FBX import (Mixamo character). Mixamo FBX exports are authored in
   // centimeters, unlike the meter-scale GLBs above, hence the 0.01 scale.
-  { id: 'bigvegas', label: 'Big Vegas', path: '/fbx/Big Vegas.fbx', scale: 0.01 },
-  { id: 'brute', label: 'Brute', path: '/fbx/Brute.fbx', scale: 0.01 },
-  { id: 'arissa', label: 'Arissa', path: '/fbx/Arissa.fbx', scale: 0.01 },
-  { id: 'ch14', label: 'Ch14', path: '/fbx/Ch14_nonPBR.fbx', scale: 0.01 },
-  // Ch16_nonPBR.fbx (also tried) is excluded: its export contains duplicate
-  // bone hierarchies (likely multiple outfit variants each bundling a full
-  // skeleton), so the "first bone with this name" lookup can grab one that
-  // isn't actually skinned to the visible mesh - legs never move. Confirmed
-  // via logging the loaded skeleton's bone names (duplicates all the way
-  // through), not just visual guessing.
-  { id: 'mawjlaygo', label: 'Maw J Laygo', path: '/fbx/Maw J Laygo.fbx', scale: 0.01 },
   { id: 'markerman', label: 'Marker Man', path: '/fbx/passive_marker_man.fbx', scale: 0.01 },
 ]
 

@@ -11,6 +11,7 @@
  */
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <esp_task_wdt.h>
 
 // ===== per-foot id =====
 #define UNIT_ID   "foot_left"
@@ -47,6 +48,19 @@
 #define ADC_MAX   4095
 #define SAMPLE_MS 10        // scan all 16 zones at 100 Hz
 #define SEND_MS   100       // send a frame at 10 Hz
+
+// ===== fault recovery =====
+// Hardware watchdog: force-reboots the board if loop() ever truly hangs,
+// instead of it silently dying with the status LED frozen solid, needing a
+// physical power-cycle to notice or fix.
+#define WDT_TIMEOUT_S 8
+// Zombie-WiFi guard: WiFi.status() is a cached flag that can keep reporting
+// WL_CONNECTED after the AP has actually dropped the association. A
+// genuinely joined station always has a real (negative) RSSI, so RSSI==0
+// while "connected" is the tell - force a disconnect after enough bad reads
+// so the retry logic below actually rejoins.
+#define ZOMBIE_CHECK_MS 3000
+#define ZOMBIE_LIMIT    3
 
 static const uint8_t SEL[4] = {PIN_S0, PIN_S1, PIN_S2, PIN_S3};
 WiFiUDP udp;
@@ -88,6 +102,20 @@ int getLiPoPercentage(float v) {
   return (int)((v - 3.30f) / (3.40f - 3.30f) * 5.0f);
 }
 
+// Arms the hardware watchdog. Called at the END of setup(), after the blocking
+// WiFi-join wait, so normal startup delays never trip a false reboot. Covers
+// both the old and new (core 3.x) esp_task_wdt init signatures so the build
+// doesn't depend on which core version is installed.
+void wdtBegin() {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  esp_task_wdt_config_t wdtConfig = { .timeout_ms = WDT_TIMEOUT_S * 1000, .idle_core_mask = 0, .trigger_panic = true };
+  esp_task_wdt_init(&wdtConfig);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_S, true);
+#endif
+  esp_task_wdt_add(NULL);
+}
+
 void connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);            // keep the radio awake so 10 Hz UDP is not dropped
@@ -119,10 +147,28 @@ void setup() {
   analogSetPinAttenuation(PIN_VBAT, ADC_11db);   // full range for the divided battery
   connectWifi();
   udp.begin(UDP_PORT);
+  wdtBegin();   // arm last, after the blocking WiFi join above is done
 }
 
 void loop() {
   uint32_t now = millis();
+  esp_task_wdt_reset();   // feed the watchdog every pass - see wdtBegin()
+
+  // Zombie-WiFi check (see ZOMBIE_* above).
+  static uint32_t lastZombieCheck = 0;
+  static uint8_t  zombieStreak = 0;
+  if (now - lastZombieCheck >= ZOMBIE_CHECK_MS) {
+    lastZombieCheck = now;
+    if (WiFi.status() == WL_CONNECTED && WiFi.RSSI() == 0) {
+      if (++zombieStreak >= ZOMBIE_LIMIT) {
+        if (Serial) Serial.println("# WARN zombie WiFi (RSSI stuck at 0) - forcing reconnect");
+        WiFi.disconnect();
+        zombieStreak = 0;
+      }
+    } else {
+      zombieStreak = 0;
+    }
+  }
 
   // Non-blocking reconnect: retry every 10 s if the link is down, WITHOUT waiting
   // (a blocking wait here froze the stream for ~15 s and showed as "stale").

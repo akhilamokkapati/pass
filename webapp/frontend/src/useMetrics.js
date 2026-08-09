@@ -10,6 +10,18 @@ const STALE = 4
 export const fresh = (age) => age != null && age < STALE
 const CAL_BUF_MAX = 12       // ~0.5-0.6s of samples at 20Hz to average per capture
 const MIN_BEND_DEG = 15      // reject a calibration bend this small or smaller
+
+// Knee flexion-axis quality gate, ported from the validated offline engine
+// (knee/axis_calibration.py's calibrate_flexion_axis / calibrate.py's
+// residual_rms_deg) - same thresholds it uses. The live flow previously only
+// checked bend SIZE; a bend that's big enough but wobbles off-axis (hip
+// rotation mixed into the "knee bend"), or a pose that wasn't held steady,
+// still produced a "Calibrated" axis that's silently wrong for the rest of
+// the session. axis_confidence = weighted collinearity of every sample's
+// rotation axis with the consensus axis (1.0 = clean single-axis motion);
+// residual = RMS angular spread of a held pose about its own average.
+const KNEE_CAL_MIN_CONFIDENCE = 0.9
+const KNEE_CAL_MAX_RESIDUAL_DEG = 5
 const SESSION_MAX = 108000   // ~90min at 20Hz - keep the full session for CSV export,
                               // not just the ~45s the live charts need
 const FEET_SETTLE_S = 2      // after a foot reconnects, the baseline hasn't yet seen a
@@ -38,6 +50,15 @@ const TOE_LOAD_OFF = 50      // toe load below this -> heel-only
 // rolling percentage within about GAIT_PCT_WINDOW_S seconds either way.
 const GAIT_PCT_WINDOW_S = 8
 const STRIDE_BUF_MAX = 6     // recent heel-strikes kept per foot for cadence
+// Cadence itself gets NO smoothing anywhere else in the pipeline - it's a
+// straight recompute from up to 5 raw intervals every tick, so a single
+// irregular step (pausing, an early/late heel-strike detection) swings the
+// number hard. EMA it the same way the knee-angle signal is smoothed above,
+// but with a longer time constant: cadence only genuinely updates once per
+// stride (roughly every 0.5-1.5s), not every tick, so it needs heavier
+// damping to actually settle - short enough to still track a real pace
+// change within a few strides, not so long it goes sluggish.
+const CADENCE_SMOOTH_TAU_S = 4
 
 // Per-rep form checks, evaluated once a rep completes. Thresholds follow the
 // same "error tolerance" idea used in knee-OA rehab literature (e.g. Chen et
@@ -48,6 +69,18 @@ const STRIDE_BUF_MAX = 6     // recent heel-strikes kept per foot for cadence
 const FORM_TARGET_MARGIN = 0.95     // peak angle must reach this fraction of kneeTarget
 const FORM_HIP_COMPENSATION_DEG = 15
 const FORM_MIN_REP_S = 0.4
+
+// Live-path smoothing for the knee-angle signal. knee/filters.py's own
+// rationale applies here too: raw per-sample noise on the BNO085 fused
+// quaternions becomes per-sample angle noise that can spike well past the
+// clinical accuracy target even when its RMS looks fine - and that noisy
+// value is what rep-phase detection, peak tracking, SI and the Rehab Score
+// all read directly. Unlike the offline engine's Butterworth design (tuned
+// for 100Hz), this is a simple EMA sized in TIME (not sample count) so it
+// works at whatever rate packets actually arrive. The time constant is kept
+// well under FORM_MIN_REP_S so it damps jitter without blurring real rep
+// timing/peaks.
+const KNEE_SMOOTH_TAU_S = 0.12
 
 // Derives display metrics from the raw socket snapshot: foot loads (baseline
 // removed), left/right balance, hip tilt-from-neutral, knee rep counting, and a
@@ -63,6 +96,11 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // Separate phase/button per side - a patient calibrating solo can't hold
     // a controlled bend on both legs at once, and one knee's capture
     // shouldn't be blocked on the other leg being mid-flow.
+    // Live smoothing state for the knee-angle signal (see KNEE_SMOOTH_TAU_S).
+    // wasOk trackers let a reconnect snap straight to the new reading instead
+    // of easing in from a stale pre-disconnect value - same idea as the feet
+    // baseline reset on reconnect below.
+    smoothKneeL: null, smoothKneeR: null, kneeLWasOk: false, kneeRWasOk: false,
     bufL: [], bufR: [], calL: null, calR: null,
     calPhaseL: 'idle', calCaptureL: null, calMsgL: '',
     calPhaseR: 'idle', calCaptureR: null, calMsgR: '',
@@ -84,7 +122,7 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     // recent heel-strike timestamps per foot for cadence. lastTickT lets the
     // EMA use real elapsed time (dt) instead of assuming a fixed tick rate.
     lastTickT: null, stancePctL: 100, stancePctR: 100, dsPct: 100,
-    heelStrikeTimesL: [], heelStrikeTimesR: [],
+    heelStrikeTimesL: [], heelStrikeTimesR: [], smoothCadence: null,
     // Two physically different insole boards rarely have matched raw
     // sensitivity (FSR batch/wiring variance) - comparing raw baseline-
     // subtracted sums directly can skew the balance split even with a
@@ -134,6 +172,10 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     if (rOk && !s.rWasOk) { s.baseR = {}; s.feetSettleUntilT = snap.t + FEET_SETTLE_S }
     s.lWasOk = lOk
     s.rWasOk = rOk
+    if (kneeLOk && !s.kneeLWasOk) s.smoothKneeL = null
+    if (kneeROk && !s.kneeRWasOk) s.smoothKneeR = null
+    s.kneeLWasOk = kneeLOk
+    s.kneeRWasOk = kneeROk
 
     const load = (arr, base) => {
       if (!arr) return 0
@@ -225,7 +267,19 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     const strideR = rOk ? avgInterval(s.heelStrikeTimesR) : null
     const strides = [strideL, strideR].filter((v) => v != null && v > 0.2 && v < 5)
     const avgStrideS = strides.length ? strides.reduce((a, b) => a + b, 0) / strides.length : null
-    const cadence = avgStrideS ? (60 / avgStrideS) * 2 : null
+    const rawCadence = avgStrideS ? (60 / avgStrideS) * 2 : null
+
+    // EMA smoothing (see CADENCE_SMOOTH_TAU_S) - snaps to the raw value on
+    // the first reading or after a gap (walking stopped, cadence went null)
+    // rather than easing in from a stale number.
+    if (rawCadence == null) {
+      s.smoothCadence = null
+    } else if (s.smoothCadence == null || !(dt > 0) || dt >= 1) {
+      s.smoothCadence = rawCadence
+    } else {
+      s.smoothCadence += (rawCadence - s.smoothCadence) * (1 - Math.exp(-dt / CADENCE_SMOOTH_TAU_S))
+    }
+    const cadence = s.smoothCadence
 
     if (s.hipRef == null && hipOk) s.hipRef = hip.q
     const hipTilt = hipOk && s.hipRef ? tiltDeg(s.hipRef, hip.q) : null
@@ -266,12 +320,26 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       return angleAboutAxisDeg(qcanon(qOffset), cal.axis)
     }
 
-    const kneeLAngle = kneeLOk
+    const rawKneeLAngle = kneeLOk
       ? (s.calL ? calibratedAngle(s.calL, knee.left.q_thigh, knee.left.q_shank) : knee.left.angle)
       : null
-    const kneeRAngle = kneeROk
+    const rawKneeRAngle = kneeROk
       ? (s.calR ? calibratedAngle(s.calR, knee.right.q_thigh, knee.right.q_shank) : knee.right.angle)
       : null
+
+    // EMA low-pass (see KNEE_SMOOTH_TAU_S above) - snaps straight to the raw
+    // value on the first sample after connect/reconnect (smoothKneeX == null,
+    // via the wasOk reset above) or if dt is degenerate, otherwise eases
+    // toward it using real elapsed time so the smoothing strength doesn't
+    // depend on packet rate.
+    const smoothTo = (key, raw) => {
+      if (raw == null) { s[key] = null; return null }
+      if (s[key] == null || !(dt > 0) || dt >= 1) { s[key] = raw; return raw }
+      s[key] += (raw - s[key]) * (1 - Math.exp(-dt / KNEE_SMOOTH_TAU_S))
+      return s[key]
+    }
+    const kneeLAngle = kneeLOk ? smoothTo('smoothKneeL', rawKneeLAngle) : null
+    const kneeRAngle = kneeROk ? smoothTo('smoothKneeR', rawKneeRAngle) : null
 
     // Hip flexion (pelvis vs that leg's thigh) - only available once
     // calibrateHips() has captured this side, and only while both the hip
@@ -353,7 +421,14 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
       const bestPeak = Math.max(s.lastRepPeakL ?? 0, s.lastRepPeakR ?? 0)
       scoreParts.push(kneeTarget > 0 ? Math.min(100, (bestPeak / kneeTarget) * 100) : 0)
     }
-    if (lOk || rOk) {
+    // Gated on cadence (real heel-strikes detected recently), not just "a
+    // foot sensor is connected" - the ~60% figure is a WALKING gait-cycle
+    // target. A patient doing a seated/stationary exercise sits at ~100%
+    // stance forever (feet planted, never swinging), and without this gate
+    // that used to floor this component at 0 and drag the whole Rehab Score
+    // down for doing nothing wrong - same failure mode as scoring weight
+    // balance against 50/50 during a deliberate single-leg exercise.
+    if (cadence != null && (lOk || rOk)) {
       const avgStancePct = lOk && rOk ? (s.stancePctL + s.stancePctR) / 2 : (lOk ? s.stancePctL : s.stancePctR)
       scoreParts.push(Math.max(0, 100 - Math.abs(avgStancePct - 60) * 4))  // full score at the ~60% healthy stance figure
     }
@@ -447,28 +522,72 @@ export function useMetrics(snap, { kneeTarget = 60 } = {}) {
     }
 
     if (s[phaseKey] === 'idle') {
-      s[captureKey] = { qt: qaverage(buf.map((b) => b.qt)), qs: qaverage(buf.map((b) => b.qs)) }
-      s[phaseKey] = 'awaiting-bent'
+      s[captureKey] = buf.slice()   // snapshot raw samples (not just their average) - the
+      s[phaseKey] = 'awaiting-bent' // quality gate below needs per-sample spread, not just the mean
       s[msgKey] = 'Now bend the knee ~30-60° and hold still, then click again'
       return
     }
 
-    const straight = s[captureKey]
+    const straightBuf = s[captureKey]
     s[phaseKey] = 'idle'
     s[captureKey] = null
-    if (!straight) {   // wasn't live for the straight capture
+    if (!straightBuf) {   // wasn't live for the straight capture
       s[msgKey] = 'Sensor dropped mid-capture - try again'
       return
     }
-    const capture = { qt: qaverage(buf.map((b) => b.qt)), qs: qaverage(buf.map((b) => b.qs)) }
-    const qNeutral = qrelative(straight.qt, straight.qs)
-    const qBentRel = qrelative(capture.qt, capture.qs)
+    const bentBuf = buf.slice()
+
+    // Relative (thigh->shank) orientation per sample - averaging THIS (not qt/qs
+    // separately) matches calibrate.py's calibrate_from_quaternions exactly.
+    const straightRels = straightBuf.map((b) => qrelative(b.qt, b.qs))
+    const bentRels = bentBuf.map((b) => qrelative(b.qt, b.qs))
+    const qNeutral = qaverage(straightRels)
+    const qBentRel = qaverage(bentRels)
     const qOffset = qrelative(qNeutral, qBentRel)
     const { axis, angleDeg } = axisAngle(qcanon(qOffset))
     if (angleDeg < MIN_BEND_DEG) {
       s[msgKey] = 'Bend too small - hold each pose still and try again'
       return
     }
+
+    // RMS angular deviation (deg) of a window's samples from their own average -
+    // "how still was this pose actually held". Mirrors calibrate.py's residual_rms_deg.
+    const residualDeg = (rels, qRef) => {
+      const devs = rels.map((r) => {
+        const dot = Math.min(1, Math.abs(r[0] * qRef[0] + r[1] * qRef[1] + r[2] * qRef[2] + r[3] * qRef[3]))
+        return (2 * Math.acos(dot) * 180) / Math.PI
+      })
+      return Math.sqrt(devs.reduce((a, d) => a + d * d, 0) / devs.length)
+    }
+    const neutralResidual = residualDeg(straightRels, qNeutral)
+    const bentResidual = residualDeg(bentRels, qBentRel)
+
+    // Axis confidence: for each bent-window sample, how well does its own
+    // rotation-from-neutral axis agree with the consensus `axis`, weighted
+    // toward bigger rotations (whose axis is better determined). Mirrors
+    // axis_calibration.py's confidence calc exactly.
+    let confWeight = 0
+    let confSum = 0
+    for (const r of bentRels) {
+      const [, x, y, z] = qcanon(qrelative(qNeutral, r))
+      const n = Math.hypot(x, y, z)
+      if (n < 1e-6) continue
+      const collin = Math.abs((x / n) * axis[0] + (y / n) * axis[1] + (z / n) * axis[2])
+      confWeight += n
+      confSum += n * collin
+    }
+    const axisConfidence = confWeight > 0 ? Math.min(1, confSum / confWeight) : 0
+
+    if (axisConfidence < KNEE_CAL_MIN_CONFIDENCE) {
+      s[msgKey] = `Bend wobbled off-axis (${Math.round(axisConfidence * 100)}% clean) - ` +
+        'keep it a straight knee bend, no hip twist or rotation, and try again'
+      return
+    }
+    if (neutralResidual > KNEE_CAL_MAX_RESIDUAL_DEG || bentResidual > KNEE_CAL_MAX_RESIDUAL_DEG) {
+      s[msgKey] = 'One of the poses was not held steady enough - hold each pose fully still and try again'
+      return
+    }
+
     s[calKey] = { qNeutral, axis }
     s[msgKey] = 'Calibrated'
   }
