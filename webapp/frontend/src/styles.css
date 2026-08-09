@@ -9,6 +9,9 @@
   --accent: #4ea1ff;
   --ok: #3ddc84;
   --warn: #f6c24b;
+  --danger: #ff5c66;
+  --danger-hover: #ff727b;
+  --danger-active: #e2454f;
   --off: #5a6472;
   --bg-glow: #16233a;
   /* Status-badge fills and other spot colors that used to be hardcoded
@@ -34,6 +37,9 @@
   --accent: #2b6fd6;
   --ok: #17915a;
   --warn: #b8790c;
+  --danger: #d33a44;
+  --danger-hover: #dd4e57;
+  --danger-active: #b32e37;
   --off: #aab3c2;
   --bg-glow: #d9e6fb;
   --ok-bg: #e3f6ec;
@@ -292,9 +298,9 @@ body {
    otherwise win by source order over a plain .act-force-stop rule - chain
    both classes here so this reliably beats it regardless of where either
    rule sits in the file. */
-.btn.act-force-stop { border-color: #b0202f; color: #fff; background: #c0293b; }
-.btn.act-force-stop:hover { background: #d43649; }
-.btn.act-force-stop:active { background: #9e1f2d; }
+.btn.act-force-stop { border: 0; color: #fff; background: var(--danger); }
+.btn.act-force-stop:hover { background: var(--danger-hover); }
+.btn.act-force-stop:active { background: var(--danger-active); }
 .dl-ico { width: 14px; height: 14px; border: 2px solid #fff; border-top: 0; border-radius: 0 0 3px 3px; position: relative; }
 .dl-ico::before { content: ""; position: absolute; left: 4px; top: -8px; width: 2px; height: 8px; background: #fff; }
 .dl-ico::after { content: ""; position: absolute; left: 1px; top: -3px; width: 6px; height: 6px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg); }
