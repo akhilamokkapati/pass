@@ -68,32 +68,33 @@ const FOOT_EASE_PER_SEC = 10
 // which reads as broken/robotic on a standing avatar. Rotating each arm bone
 // brings it down to the character's side instead.
 //
-// First attempt hardcoded a single rest direction (+X/-X) derived from
-// Xbot.glb's specific bind pose. That only fixed Xbot - Michelle and Marker
-// Man kept a broken/twisted-looking pose (not a clean T-pose OR a clean
-// arms-down, something in between) for two stacked reasons:
+// Three bugs stacked on the road to this, all traced back to the same root
+// cause: the first version was derived from - and only ever verified against
+// - Xbot.glb, and Xbot's rig happens to have identity rotations everywhere
+// up the arm chain, which quietly hid two mistakes that only show up on a
+// rig where that's NOT true (Michelle, Marker Man):
 //
-// 1) The rest direction itself was Xbot-specific. Fixed by measuring it per
-//    model instead: ForeArm's rest-pose local position is the direction FROM
-//    the Arm bone TO the ForeArm bone, expressed in the Arm bone's own local
-//    space (position is independent of the parent's rotation, so this works
-//    regardless of what that rotation actually is) - "which way the upper
-//    arm points, right now, in THIS model's bind pose", computed fresh per
-//    loaded model instead of assumed from one reference model.
+// 1) Rest DIRECTION was hardcoded from Xbot's bind pose (+X/-X) instead of
+//    measured. Fixed: each ForeArm bone's rest-pose LOCAL position IS the
+//    direction its Arm bone points at rest (position is independent of the
+//    parent's rotation), so it's read fresh per loaded model now instead of
+//    assumed from one reference model.
 //
-// 2) How the correction gets APPLIED was also Xbot-specific, more subtly:
-//    every other corrected bone here (knee bend, hip flex, foot pitch) uses
-//    `rest.multiply(delta)` because those add an incremental rotation ON TOP
-//    of an already-correct rest pose. The arm correction is not incremental
-//    - it REPLACES a broken rest pose, so composing it onto `rest` first
-//    only produces the right answer when rest happens to be the identity
-//    quaternion (true for Xbot, NOT guaranteed for every model/rig export -
-//    Michelle/Marker Man's arm bones carry a real rest rotation, and
-//    `rest.multiply(correction)` on top of that produced the twisted result
-//    above). `correction` alone already satisfies "rotate restDir to
-//    ARM_TARGET_DIR" by construction (that's what setFromUnitVectors solves
-//    for) - the bone's quaternion is set to `correction` directly, with no
-//    rest pose folded in.
+// 2) The correction was composed as `rest.multiply(correction)`, matching
+//    every other bone here (knee bend, hip flex, foot pitch) - but those add
+//    an INCREMENTAL rotation on top of an already-correct rest pose, while
+//    the arm correction REPLACES a broken one. That composition only gives
+//    the right answer when `rest` is identity (Xbot). Fixed: the arm bone's
+//    quaternion is set to `correction` directly, nothing folded in.
+//
+// 3) `correction` rotates the LOCAL rest direction to ARM_TARGET_DIR, but
+//    the arm bone's quaternion is itself LOCAL - relative to its parent (the
+//    shoulder). world = parentWorld * local, so "local -Y" only means
+//    "world down" when the shoulder's own WORLD rotation is identity (Xbot,
+//    again). Fixed: ARM_TARGET_DIR gets rotated into the shoulder's current
+//    local frame (by the inverse of the shoulder's world quaternion) before
+//    solving for `correction`, so the result points down in the SCENE
+//    regardless of what the shoulder bone itself is doing.
 const ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
@@ -117,16 +118,32 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       restQuat.current[key] = bone.quaternion.clone()
     }
 
+    // World matrices on a freshly cloned skeleton aren't guaranteed current -
+    // needed below because the shoulder's WORLD rotation (not its own local
+    // rotation) is what determines which LOCAL direction on the arm bone
+    // actually points straight down in the scene.
+    root.updateMatrixWorld(true)
+
     armDownQuat.current = {}
     const b = bones.current
-    if (b.leftArm && b.leftForeArm && b.leftForeArm.position.lengthSq() > 1e-8) {
-      const restDir = b.leftForeArm.position.clone().normalize()
-      armDownQuat.current.left = new THREE.Quaternion().setFromUnitVectors(restDir, ARM_TARGET_DIR)
+    const armCorrection = (armBone, foreArmBone) => {
+      if (!armBone || !foreArmBone || foreArmBone.position.lengthSq() < 1e-8 || !armBone.parent) return null
+      const restDir = foreArmBone.position.clone().normalize()
+      // ARM_TARGET_DIR is a WORLD-space direction (straight down); the arm
+      // bone's own quaternion is LOCAL (relative to its parent, the
+      // shoulder). Composing world = parentWorld * local means the target
+      // this local quaternion needs to hit is ARM_TARGET_DIR rotated into
+      // the shoulder's local frame, i.e. by the INVERSE of the shoulder's
+      // current world rotation - not ARM_TARGET_DIR directly. Skipping this
+      // step is what sent Michelle's arms up instead of down: her shoulder
+      // bone's own rest rotation isn't identity the way Xbot's is, so a
+      // "local -Y" target meant something other than world-down for her.
+      const parentWorldQuat = armBone.parent.getWorldQuaternion(new THREE.Quaternion())
+      const localTarget = ARM_TARGET_DIR.clone().applyQuaternion(parentWorldQuat.invert())
+      return new THREE.Quaternion().setFromUnitVectors(restDir, localTarget)
     }
-    if (b.rightArm && b.rightForeArm && b.rightForeArm.position.lengthSq() > 1e-8) {
-      const restDir = b.rightForeArm.position.clone().normalize()
-      armDownQuat.current.right = new THREE.Quaternion().setFromUnitVectors(restDir, ARM_TARGET_DIR)
-    }
+    armDownQuat.current.left = armCorrection(b.leftArm, b.leftForeArm)
+    armDownQuat.current.right = armCorrection(b.rightArm, b.rightForeArm)
   }, [root])
 
   useFrame((_state, delta) => {
