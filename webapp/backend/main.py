@@ -36,7 +36,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ingest, sessions
+from . import ingest, sessions, sensor_log
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 FRONTEND_DIST = REPO / "webapp" / "frontend" / "dist"
@@ -166,6 +166,26 @@ async def api_actuation_recommendation_respond(request: Request) -> dict:
     if result is None:
         raise HTTPException(status_code=409, detail="no recommendation is currently pending")
     return {"recommendation": result}
+
+
+@app.post("/api/sensors/snapshot")
+async def api_sensors_snapshot(request: Request) -> dict:
+    """Periodic snapshot of the frontend's live computed metrics (App.jsx, on
+    a fixed interval while sensors are live) - see sensor_log.py for why this
+    is periodic snapshots rather than discrete sessions like the actuation
+    log above."""
+    body = await request.json()
+    record = sensor_log.log_snapshot(
+        knee_l=body.get("kneeL"), knee_r=body.get("kneeR"), hip_tilt=body.get("hipTilt"),
+        rehab_score=body.get("rehabScore"), symmetry_pct=body.get("symmetryPct"),
+        cadence=body.get("cadence"), reps_l=body.get("repsL"), reps_r=body.get("repsR"),
+    )
+    return {"snapshot": record}
+
+
+@app.get("/api/sensors/snapshots")
+async def api_sensors_snapshots(limit: int = 200) -> dict:
+    return {"snapshots": sensor_log.get_snapshots(limit=limit)}
 
 
 @app.websocket("/ws")

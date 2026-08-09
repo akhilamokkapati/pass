@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSocket } from './useSocket.js'
 import { useMetrics } from './useMetrics.js'
 import { getSession, logOut, profileSummary } from './auth.js'
@@ -8,10 +8,14 @@ import ClinicianView from './ClinicianView.jsx'
 import GaitView from './GaitView.jsx'
 import DevicesPanel from './DevicesPanel.jsx'
 import ActuationPanel from './ActuationPanel.jsx'
-import SessionLogView from './SessionLogView.jsx'
+import SensorLogView from './SensorLogView.jsx'
 
 const KNEE_TARGET = 60
 const THEME_KEY = 'pass_theme'
+// "Different periods of the day" per the ask that prompted this - a snapshot
+// every 15 minutes gives a coarse timeline without spamming sensor_log.db
+// with near-duplicate rows every tick.
+const SNAPSHOT_INTERVAL_MS = 15 * 60 * 1000
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -41,6 +45,35 @@ export default function App() {
   // (a separate tracker from useMetrics.js's) resets in lockstep instead of
   // silently drifting apart from the balance bar's zero point.
   const [feetZeroEpoch, setFeetZeroEpoch] = useState(0)
+
+  // Periodic sensor snapshot log (webapp/backend/sensor_log.py), shown on the
+  // Logs tab - separate from the actuation session log, which is discrete
+  // Start/Stop sessions instead of a fixed-interval reading. mRef keeps the
+  // interval reading the LATEST m without recreating the interval itself on
+  // every metrics tick (m changes ~20x/sec; this effect must only run once).
+  const mRef = useRef(m)
+  useEffect(() => { mRef.current = m }, [m])
+  useEffect(() => {
+    const id = setInterval(() => {
+      const cur = mRef.current
+      if (!cur?.anyLive) return   // nothing meaningful to snapshot if no sensor has a live link
+      fetch('/api/sensors/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kneeL: cur.kneeLOk ? cur.kneeLAngle : null,
+          kneeR: cur.kneeROk ? cur.kneeRAngle : null,
+          hipTilt: cur.hipOk ? cur.hipTilt : null,
+          rehabScore: cur.rehabScore,
+          symmetryPct: cur.symmetryIndexOverall,
+          cadence: cur.cadence,
+          repsL: cur.repsL,
+          repsR: cur.repsR,
+        }),
+      }).catch(() => {})   // offline - skip this tick, the next one will try again
+    }, SNAPSHOT_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [])
 
   if (!session) return <LoginView onAuth={setSession} />
 
@@ -97,7 +130,7 @@ export default function App() {
       {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} actions={actions} />}
       {tab === 'gait' && <GaitView m={m} />}
       {tab === 'session' && <ActuationPanel m={m} session={session} />}
-      {tab === 'logs' && <SessionLogView />}
+      {tab === 'logs' && <SensorLogView />}
 
       <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
     </div>

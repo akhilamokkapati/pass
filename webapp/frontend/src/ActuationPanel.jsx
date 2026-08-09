@@ -28,6 +28,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { StatusPill } from './ui.jsx'
 import TimeChart from './TimeChart.jsx'
+import ActuationLogCard from './ActuationLogCard.jsx'
 
 async function postJson(path, body) {
   try {
@@ -101,6 +102,7 @@ export default function ActuationPanel({ m, session }) {
   const [phase, setPhase] = useState('idle') // idle | countdown | twisting | ready | exercising | summary
   const [countdown, setCountdown] = useState(COUNTDOWN_S)
   const [summary, setSummary] = useState(null)
+  const [logRefreshKey, setLogRefreshKey] = useState(0)
   const sessionRef = useRef({ startedAt: null, samples: [], target: 0 })
   const jogTimer = useRef(null)
 
@@ -154,7 +156,7 @@ export default function ActuationPanel({ m, session }) {
     postJson('/api/actuation/session', {
       target: s.target, durationS, peak, avg, samples: s.samples.length,
       completed: true, kgOptions: KG_OPTIONS,
-    })
+    }).then(() => setLogRefreshKey((k) => k + 1))
   }
 
   // A force stop mid-exercise is still a meaningful data point ("this level
@@ -171,7 +173,7 @@ export default function ActuationPanel({ m, session }) {
       postJson('/api/actuation/session', {
         target: s.target, durationS, peak, avg, samples: s.samples.length,
         completed: false, kgOptions: KG_OPTIONS,
-      })
+      }).then(() => setLogRefreshKey((k) => k + 1))
     }
     setPhase('idle')
   }
@@ -341,6 +343,8 @@ export default function ActuationPanel({ m, session }) {
           <div className="cue">Press and hold</div>
         </div>
       )}
+
+      <ActuationLogCard refreshKey={logRefreshKey} />
 
       <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
     </div>
