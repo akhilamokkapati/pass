@@ -33,7 +33,7 @@ HX711 scale;
 
 const byte READ_SAMPLES = 10;    // averaging per capture - balance of noise vs wait time
 const float DEADBAND_KG = 0.3;   // for the live idle preview only
-const byte MAX_POINTS = 20;
+const byte MAX_POINTS = 50;
 
 float pointWeight[MAX_POINTS];
 float pointValue[MAX_POINTS];
