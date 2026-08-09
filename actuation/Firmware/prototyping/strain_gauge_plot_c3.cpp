@@ -5,8 +5,8 @@
 #include <Arduino.h>
 #include <HX711.h>
 
-const int HX711_DT = D0;
-const int HX711_SCK = D1;
+const int HX711_DT = D9;
+const int HX711_SCK = D10;
 
 HX711 scale;
 
