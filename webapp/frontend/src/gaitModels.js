@@ -10,11 +10,11 @@
 // response at all (straight/idle legs - the rig likely doesn't share this
 // skeleton's naming, same failure class as Ch16_nonPBR below), and
 // Soldier/Maw J Laygo/Ch14 responded but with a distorted, twisted result
-// that isn't trustworthy for actual clinical use. Xbot and Marker Man showed
-// a clean asymmetric bend matching the test values; Michelle's legs did too
-// (her arm rest-pose is still off, a separate known issue - see ARM_DOWN_QUAT
-// in GaitAvatar.jsx, but that's cosmetic only and doesn't affect the knee
-// reading itself).
+// that isn't trustworthy for actual clinical use. Xbot, Marker Man, and
+// Michelle all showed a clean asymmetric leg bend matching the test values -
+// see GaitAvatar.jsx for the per-model arm rest-pose correction that makes
+// all three (not just Xbot) hang their arms at their sides instead of
+// T-posing.
 export const GAIT_MODELS = [
   { id: 'xbot', label: 'Xbot', path: '/Xbot.glb' },
   { id: 'michelle', label: 'Michelle', path: '/Michelle.glb' },

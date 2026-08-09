@@ -22,6 +22,8 @@ const BONE = {
   rightFoot: ['mixamorigRightFoot', 'mixamorig:RightFoot'],
   leftArm: ['mixamorigLeftArm', 'mixamorig:LeftArm'],
   rightArm: ['mixamorigRightArm', 'mixamorig:RightArm'],
+  leftForeArm: ['mixamorigLeftForeArm', 'mixamorig:LeftForeArm'],
+  rightForeArm: ['mixamorigRightForeArm', 'mixamorig:RightForeArm'],
 }
 
 // Local axis each bone bends about, in ITS OWN rest-pose local space. Found by
@@ -66,26 +68,21 @@ const FOOT_EASE_PER_SEC = 10
 // which reads as broken/robotic on a standing avatar. Rotating each arm bone
 // brings it down to the character's side instead.
 //
-// Derived from the actual Xbot.glb bind pose (parsed the GLB's JSON chunk
-// directly): every bone's local rotation in the rest pose is identity - the
-// T-pose shape comes entirely from translation offsets between bones, not
-// rotation. LeftForeArm sits at ~[27.8, 0, 0] relative to LeftArm, i.e. the
-// arm rests pointing along local/world +X (RightArm along -X).
-//
-// Two hand-derived axis/angle attempts both produced visibly wrong results
-// live (X axis: diagonal fling; Z axis 90deg: arms swung down but crossed in
-// toward the pelvis instead of staying at the sides - manual axis/sign
-// reasoning kept introducing error). Switched to computing the rotation
-// directly with setFromUnitVectors(restDirection, targetDirection): this
-// finds the exact minimal rotation between the two vectors instead of
-// requiring the axis/angle to be derived and verified by hand, removing that
-// whole class of mistake. Target is straight down (0,-1,0), i.e. hanging at
-// the sides.
-const ARM_REST_DIR_LEFT = new THREE.Vector3(1, 0, 0)
-const ARM_REST_DIR_RIGHT = new THREE.Vector3(-1, 0, 0)
+// First attempt hardcoded a single rest direction (+X/-X) derived from
+// Xbot.glb's specific bind pose. That only fixed Xbot - Michelle and Marker
+// Man kept the T-pose because their arm bones don't rest along the same
+// local axis (different bind pose per model/rig export, even sharing the
+// Mixamo bone NAMES doesn't guarantee the same rest ORIENTATION). Fixed
+// generically instead: ForeArm's rest-pose local position is the direction
+// FROM the Arm bone TO the ForeArm bone, expressed in the Arm bone's own
+// local space (position is independent of the parent's rotation, so this
+// works regardless of what that rest rotation actually is) - i.e. "which way
+// the upper arm points, right now, in this specific model's bind pose". That
+// measured direction is what setFromUnitVectors rotates from, computed fresh
+// per loaded model instead of assumed from one reference model. Falls back
+// to no correction (leaves the T-pose) if a ForeArm bone isn't found, rather
+// than guessing.
 const ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
-const ARM_DOWN_QUAT_LEFT = new THREE.Quaternion().setFromUnitVectors(ARM_REST_DIR_LEFT, ARM_TARGET_DIR)
-const ARM_DOWN_QUAT_RIGHT = new THREE.Quaternion().setFromUnitVectors(ARM_REST_DIR_RIGHT, ARM_TARGET_DIR)
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
 // loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
@@ -93,6 +90,7 @@ const ARM_DOWN_QUAT_RIGHT = new THREE.Quaternion().setFromUnitVectors(ARM_REST_D
 function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFlexRDeg, footPhaseL, footPhaseR }) {
   const bones = useRef({})
   const restQuat = useRef({})
+  const armDownQuat = useRef({})
   const footAngle = useRef({ left: 0, right: 0 })
 
   useEffect(() => {
@@ -105,6 +103,17 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     })
     for (const [key, bone] of Object.entries(bones.current)) {
       restQuat.current[key] = bone.quaternion.clone()
+    }
+
+    armDownQuat.current = {}
+    const b = bones.current
+    if (b.leftArm && b.leftForeArm && b.leftForeArm.position.lengthSq() > 1e-8) {
+      const restDir = b.leftForeArm.position.clone().normalize()
+      armDownQuat.current.left = new THREE.Quaternion().setFromUnitVectors(restDir, ARM_TARGET_DIR)
+    }
+    if (b.rightArm && b.rightForeArm && b.rightForeArm.position.lengthSq() > 1e-8) {
+      const restDir = b.rightForeArm.position.clone().normalize()
+      armDownQuat.current.right = new THREE.Quaternion().setFromUnitVectors(restDir, ARM_TARGET_DIR)
     }
   }, [root])
 
@@ -160,11 +169,12 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
     }
 
-    if (b.leftArm && rest.leftArm) {
-      b.leftArm.quaternion.copy(rest.leftArm).multiply(ARM_DOWN_QUAT_LEFT)
+    const armDown = armDownQuat.current
+    if (b.leftArm && rest.leftArm && armDown.left) {
+      b.leftArm.quaternion.copy(rest.leftArm).multiply(armDown.left)
     }
-    if (b.rightArm && rest.rightArm) {
-      b.rightArm.quaternion.copy(rest.rightArm).multiply(ARM_DOWN_QUAT_RIGHT)
+    if (b.rightArm && rest.rightArm && armDown.right) {
+      b.rightArm.quaternion.copy(rest.rightArm).multiply(armDown.right)
     }
   })
 }
