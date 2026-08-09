@@ -200,6 +200,17 @@ body {
 .act-force-stop:hover { background: #d43649; }
 .act-force-stop:active { background: #9e1f2d; }
 
+/* ---- logs tab ---- */
+.log-card .card-head { margin-bottom: 14px; }
+.log-card .card-head .btn { margin-top: 0; padding: 7px 14px; font-size: 12px; }
+.log-table-wrap { width: 100%; overflow-x: auto; }
+.log-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; white-space: nowrap; }
+.log-table th { color: var(--muted); font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.log-table td { color: var(--text); padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.log-table tbody tr:last-child td { border-bottom: 0; }
+.log-ok { color: var(--ok); font-weight: 600; }
+.log-warn { color: var(--warn); font-weight: 600; }
+
 .ring { display: block; margin: 8px 0 2px; filter: drop-shadow(0 4px 12px #0004); }
 .ring-val { font-size: 54px; font-weight: 800; fill: var(--text); }
 .ring-unit { font-size: 24px; font-weight: 600; fill: var(--muted); }

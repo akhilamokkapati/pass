@@ -8,6 +8,7 @@ import ClinicianView from './ClinicianView.jsx'
 import GaitView from './GaitView.jsx'
 import DevicesPanel from './DevicesPanel.jsx'
 import ActuationPanel from './ActuationPanel.jsx'
+import SessionLogView from './SessionLogView.jsx'
 
 const KNEE_TARGET = 60
 const THEME_KEY = 'pass_theme'
@@ -64,6 +65,7 @@ export default function App() {
             </button>
             <button className={tab === 'gait' ? 'on' : ''} onClick={() => setTab('gait')}>Gait</button>
             <button className={tab === 'session' ? 'on' : ''} onClick={() => setTab('session')}>Session</button>
+            <button className={tab === 'logs' ? 'on' : ''} onClick={() => setTab('logs')}>Logs</button>
           </div>
           <button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             title="Toggle light/dark mode" aria-label="Toggle light/dark mode">
@@ -95,6 +97,7 @@ export default function App() {
       {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} actions={actions} />}
       {tab === 'gait' && <GaitView m={m} />}
       {tab === 'session' && <ActuationPanel m={m} session={session} />}
+      {tab === 'logs' && <SessionLogView />}
 
       <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
     </div>
