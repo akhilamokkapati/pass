@@ -1,8 +1,8 @@
-// Session tab: force-level control for the actuation module. Commands go
-// through POST /api/actuation/command, which works whether the backend is
-// local (direct LAN broadcast) or the Render deploy (queued for relay.py to
-// drain and re-broadcast) - see backend/ingest.py send_command vs
-// queue_command.
+// Session tab: force-level control + twist/untwist for the actuation module.
+// Commands go through POST /api/actuation/command, which works whether the
+// backend is local (direct LAN broadcast) or the Render deploy (queued for
+// relay.py to drain and re-broadcast) - see backend/ingest.py send_command
+// vs queue_command.
 //
 // "Ready" (twisted to target) is judged from the board's own live tension_n,
 // same honesty rule as the rest of the dashboard - no synthetic data. Until
@@ -12,19 +12,18 @@
 // it's a real control a user might need anyway (feel-based confirmation),
 // not a fake sensor reading.
 //
-// Role split: the clinician does not run the patient's session, and does not
-// get raw motor jog controls either - the level picker, Start, and the
-// in-session Stop are patient-only, and there's no manual twist/untwist
-// exposed to anyone (the automatic countdown -> twist-to-target flow is the
-// only way force gets commanded). Instead, the backend
-// (webapp/backend/sessions.py) looks at the patient's logged session history
-// and recommends the next weight to try; the clinician's job on this tab is
-// reviewing that history and approving/rejecting the recommendation. Force
-// Stop is the one control available to BOTH roles - it's a safety escape
-// hatch, not a way to run the exercise, so it shouldn't require the patient
-// to be the one holding it. The recommendation itself is a nudge, not a lock
-// - once approved it just surfaces a "use this weight" button on the
-// patient's side, it doesn't auto-start anything or block other levels.
+// Role split: the clinician does not run the patient's session - the level
+// picker, Start, in-session Stop, AND the manual Twist/Untwist jog controls
+// are all patient-only, since it's the patient's body wearing/operating the
+// actuator. Instead, the backend (webapp/backend/sessions.py) looks at the
+// patient's logged session history and recommends the next weight to try;
+// the clinician's job on this tab is reviewing that history and approving/
+// rejecting the recommendation, nothing hands-on. Force Stop is the one
+// control available to BOTH roles - it's a safety escape hatch, not a way to
+// run the exercise, so it shouldn't require the patient to be the one
+// holding it. The recommendation itself is a nudge, not a lock - once
+// approved it just surfaces a "use this weight" button on the patient's
+// side, it doesn't auto-start anything or block other levels.
 
 import { useEffect, useRef, useState } from 'react'
 import { StatusPill } from './ui.jsx'
@@ -53,6 +52,7 @@ function summarizeSession(s) {
 }
 
 const COUNTDOWN_S = 3
+const JOG_REPEAT_MS = 150
 const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
 // Preset force-level buttons (kg) replacing the old 0-100 slider. Sent to the
 // board as-is (raw kg), matching set_force/twist's existing unit convention -
@@ -102,6 +102,7 @@ export default function ActuationPanel({ m, session }) {
   const [countdown, setCountdown] = useState(COUNTDOWN_S)
   const [summary, setSummary] = useState(null)
   const sessionRef = useRef({ startedAt: null, samples: [], target: 0 })
+  const jogTimer = useRef(null)
 
   useEffect(() => {
     if (phase !== 'countdown') return
@@ -127,6 +128,8 @@ export default function ActuationPanel({ m, session }) {
     if (phase !== 'exercising') return
     sessionRef.current.samples.push(tension)
   }, [phase, tension])
+
+  useEffect(() => () => clearInterval(jogTimer.current), [])
 
   const startSession = () => {
     setSummary(null)
@@ -160,6 +163,7 @@ export default function ActuationPanel({ m, session }) {
   // (still twisting, hasn't started exercising yet) has no sample data worth
   // logging.
   const forceStop = () => {
+    clearInterval(jogTimer.current)
     sendCmd('stop', 0)
     if (phase === 'exercising') {
       const s = sessionRef.current
@@ -174,6 +178,16 @@ export default function ActuationPanel({ m, session }) {
 
   const respondRecommendation = (approved) =>
     postJson('/api/actuation/recommendation/respond', { approved })
+
+  const jogStart = (cmd) => {
+    sendCmd(cmd, 1)
+    clearInterval(jogTimer.current)
+    jogTimer.current = setInterval(() => sendCmd(cmd, 1), JOG_REPEAT_MS)
+  }
+  const jogStop = () => {
+    clearInterval(jogTimer.current)
+    sendCmd('stop', 0)
+  }
 
   // Target-vs-actual consistency (supposed force vs what the strain gauge
   // reports) - only meaningful once a session has actually commanded a
@@ -306,6 +320,25 @@ export default function ActuationPanel({ m, session }) {
           {!isClinician && rec.status === 'pending' && (
             <div className="cue">Waiting for your therapist to review this</div>
           )}
+        </div>
+      )}
+
+      {!isClinician && (
+        <div className="card center accent-actuation">
+          <div className="card-head"><h3>Manual control</h3></div>
+          <div className="act-jog">
+            <button className="btn ghost"
+              onMouseDown={() => jogStart('twist')} onMouseUp={jogStop} onMouseLeave={jogStop}
+              onTouchStart={() => jogStart('twist')} onTouchEnd={jogStop}>
+              Twist
+            </button>
+            <button className="btn ghost"
+              onMouseDown={() => jogStart('untwist')} onMouseUp={jogStop} onMouseLeave={jogStop}
+              onTouchStart={() => jogStart('untwist')} onTouchEnd={jogStop}>
+              Untwist
+            </button>
+          </div>
+          <div className="cue">Press and hold</div>
         </div>
       )}
 
