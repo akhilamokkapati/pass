@@ -55,8 +55,20 @@ SYSTEM_PROMPT = (
     "specifically in the numbers given - not generic rehab advice.\n\n"
     "Only comment on what the data actually shows. If something is missing "
     "or inconclusive (e.g. not enough sessions logged yet), say so plainly "
-    "instead of speculating. Do not invent metrics that weren't provided."
+    "instead of speculating. Do not invent metrics that weren't provided.\n\n"
+    "Do not use em dashes or en dashes anywhere. Use a plain hyphen for "
+    "ranges (e.g. 8-10 reps) and rephrase sentences instead of using dashes "
+    "as punctuation."
 )
+
+# Unicode dash variants Gemini sometimes emits despite the instruction above.
+# The app deliberately avoids em dashes everywhere, so normalise any of these
+# to a plain hyphen before the summary reaches the dashboard or the PDF report.
+_DASHES = "‒–—―−"   # figure/en/em/bar/minus
+
+
+def _strip_dashes(text: str) -> str:
+    return "".join("-" if ch in _DASHES else ch for ch in text)
 
 
 def _fmt_snapshot(s: dict) -> str:
@@ -116,4 +128,4 @@ def generate_summary() -> dict:
     text = (resp.text or "").strip()
     if not text:
         return {"error": "AI returned an empty response - try again."}
-    return {"summary": text}
+    return {"summary": _strip_dashes(text)}

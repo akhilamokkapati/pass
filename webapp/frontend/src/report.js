@@ -187,49 +187,57 @@ export function buildReportDoc(m, summary) {
     doc.text('AI progress summary', M + 13, y)
     y += 16
 
+    // Estimate wrapped height of `text` at the given width/size, for page breaks.
+    const measure = (text, maxW, size) => {
+      doc.setFontSize(size)
+      return doc.splitTextToSize(text.replace(/\*\*/g, ''), maxW).length
+    }
+    const lineH = 14
+
     const lines = summary.replace(/\r/g, '').split('\n')
     for (const raw of lines) {
       const line = raw.replace(/\s+$/, '')
-      if (line.trim() === '') { y += 5; continue }
+      if (line.trim() === '') continue                         // blank: leading handles spacing
 
       if (/^-{3,}$/.test(line.trim())) {                       // --- divider
-        ensureSpace(16)
+        y += 12
+        ensureSpace(6)
         doc.setDrawColor(230, 235, 241)
         doc.setLineWidth(1)
         doc.line(M, y, PAGE_W - M, y)
-        y += 12
+        y += 6
         continue
       }
       const h = line.match(/^#{1,6}\s+(.*)$/)                  // ### heading
       if (h) {
-        ensureSpace(26)
-        y += 8
-        y = drawRich(doc, M, y, W, parseRuns(h[1]), 11, 15, [30, 36, 46], true) + 6
+        y += 22
+        ensureSpace(measure(h[1], W, 11) * 15)
+        y = drawRich(doc, M, y, W, parseRuns(h[1]), 11, 15, [30, 36, 46], true)
         continue
       }
       const n = line.match(/^(\d+)\.\s+(.*)$/)                 // 1. list item
       if (n) {
-        ensureSpace(20)
-        y += 4
+        y += 15
+        ensureSpace(measure(n[2], W - 18, 10) * lineH)
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(10)
         doc.setTextColor(30, 36, 46)
         doc.text(n[1] + '.', M, y)
-        y = drawRich(doc, M + 18, y, W - 18, parseRuns(n[2]), 10, 14, [55, 62, 74]) + 13
+        y = drawRich(doc, M + 18, y, W - 18, parseRuns(n[2]), 10, lineH, [55, 62, 74])
         continue
       }
       const b = line.match(/^\s*[*-]\s+(.*)$/)                 // * / - bullet
       if (b) {
-        ensureSpace(18)
-        y += 2
+        y += 13
+        ensureSpace(measure(b[1], W - 16, 10) * lineH)
         doc.setFillColor(120, 127, 138)
         doc.circle(M + 6, y - 3, 1.3, 'F')
-        y = drawRich(doc, M + 16, y, W - 16, parseRuns(b[1]), 10, 14, [70, 77, 88]) + 13
+        y = drawRich(doc, M + 16, y, W - 16, parseRuns(b[1]), 10, lineH, [70, 77, 88])
         continue
       }
-      ensureSpace(18)                                          // paragraph
-      y += 2
-      y = drawRich(doc, M, y, W, parseRuns(line), 10, 14, [55, 62, 74]) + 13
+      y += 14                                                  // paragraph
+      ensureSpace(measure(line, W, 10) * lineH)
+      y = drawRich(doc, M, y, W, parseRuns(line), 10, lineH, [55, 62, 74])
     }
 
     // Divider before the metric cards.
