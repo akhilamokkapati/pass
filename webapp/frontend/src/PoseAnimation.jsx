@@ -25,10 +25,11 @@ export default function PoseAnimation({ pose }) {
   return (
     <svg viewBox="0 0 160 190" className="pose-anim" aria-label={POSE_LABEL[pose] || ''}>
       <g className={cls}>
-        {/* head */}
-        <circle cx="80" cy="26" r="13" className="pose-part" />
-        {/* torso + arms, rotate together as one unit for the hip-tilt lean */}
+        {/* head + torso + arms, rotate together as ONE rigid unit for the
+            hip-tilt lean - the head must stay attached to the torso through
+            the rotation, not sit fixed while the body pivots under it */}
         <g className="pose-upper">
+          <circle cx="80" cy="26" r="13" className="pose-part" />
           <line x1="80" y1="39" x2="80" y2="104" className="pose-part" />
           <line x1="80" y1="52" x2="58" y2="90" className="pose-part" />
           <line x1="80" y1="52" x2="102" y2="90" className="pose-part" />
