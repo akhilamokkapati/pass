@@ -17,10 +17,16 @@
 // T-posing.
 export const GAIT_MODELS = [
   { id: 'xbot', label: 'Xbot', path: '/Xbot.glb' },
-  { id: 'michelle', label: 'Michelle', path: '/Michelle.glb' },
+  // Same Mixamo bone names as Xbot, but the UpLeg/Leg bones are exported with
+  // the opposite bend handedness, so the shared KNEE_SIGN/HIP_FLEX_SIGN
+  // defaults (tuned against Xbot) drive the thigh and knee backwards here.
+  // Flipped both per-model rather than changing the shared default and
+  // breaking Xbot.
+  { id: 'michelle', label: 'Michelle', path: '/Michelle.glb', rig: { hipFlexSign: 1, kneeSign: -1 } },
   // FBX import (Mixamo character). Mixamo FBX exports are authored in
   // centimeters, unlike the meter-scale GLBs above, hence the 0.01 scale.
-  { id: 'markerman', label: 'Marker Man', path: '/fbx/passive_marker_man.fbx', scale: 0.01 },
+  // Same bend-handedness flip as Michelle - see comment above.
+  { id: 'markerman', label: 'Marker Man', path: '/fbx/passive_marker_man.fbx', scale: 0.01, rig: { hipFlexSign: 1, kneeSign: -1 } },
   // Little RUNMO mascot - a custom (non-Mixamo) Sketchfab rig, so it needs an
   // explicit bone-name map. Its bones spin on their own local axes, so the
   // bend axes/signs below are tuned for this skeleton rather than the Mixamo
