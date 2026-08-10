@@ -1,5 +1,7 @@
-// Builds a self-contained HTML session report and downloads it, so a clinician
-// can save or share it (and print to PDF). No dependencies.
+// Builds a self-contained HTML session report and opens it with the browser's
+// print dialog so a clinician can save it straight to PDF (crisp vector text
+// and charts, no library). Falls back to an .html download if a popup blocker
+// stops the print window. No dependencies.
 
 function sparkSvg(vals, color) {
   const v = vals.filter((x) => x != null)
@@ -44,6 +46,7 @@ export function downloadReport(m) {
  <h1>PASS session report</h1>
  <div class=muted>Generated ${now.toLocaleString()}</div>
  <button class="btn noprint" onclick="window.print()">Save as PDF / print</button>
+ <script>window.addEventListener('load',function(){setTimeout(function(){window.print()},250)})</script>
  <h2>Left knee flexion</h2>
  <div class=row>${kneeL.row}</div>
  <div style="margin-top:10px">${kneeL.spark}</div>
@@ -58,8 +61,19 @@ export function downloadReport(m) {
  <p class=muted>PASS, Patient Assessment Sensing System. Knee and pelvis angles from IMU quaternions (swing twist); foot loads from insole pressure in relative units. Validate against a goniometer and weighing scale before clinical use.</p>
 </body></html>`
 
+  // Open the report in a new window via a blob URL (no document.write). The
+  // embedded script fires the print dialog on load, where the clinician picks
+  // "Save as PDF". The window title becomes the suggested PDF filename.
   const blob = new Blob([html], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (win) {
+    // Release the object URL once the new window has had time to load it.
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+    return
+  }
+
+  // Popup blocked: fall back to downloading the HTML so nothing is lost.
   const a = document.createElement('a')
   a.href = url
   a.download = `PASS-report-${now.toISOString().slice(0, 10)}.html`
