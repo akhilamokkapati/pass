@@ -32,7 +32,7 @@
 import { StatusPill } from './ui.jsx'
 import TimeChart from './TimeChart.jsx'
 import ActuationLogCard from './ActuationLogCard.jsx'
-import { KG_OPTIONS } from './useActuationSession.js'
+import { KG_OPTIONS, EXERCISES } from './useActuationSession.js'
 
 function downloadSummary(summary) {
   const lines = [
@@ -58,8 +58,8 @@ function downloadSummary(summary) {
 export default function ActuationPanel({ session, act }) {
   const isClinician = session?.role === 'clinician'
   const {
-    online, tension, boardState, rec,
-    level, setLevel, phase, setPhase, countdown, summary, logRefreshKey,
+    online, tension, rec,
+    level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
     respondRecommendation, jogStart, jogStop,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
@@ -68,14 +68,14 @@ export default function ActuationPanel({ session, act }) {
   return (
     <div className="grid actuation">
       <div className={`card center accent-actuation ${online ? '' : 'off'}`}>
-        <div className="card-head"><h3>Actuation</h3><StatusPill ok={online} /></div>
+        <div className="card-head"><h3>Session Data</h3><StatusPill ok={online} /></div>
         <div className="act-tension">{online ? tension.toFixed(1) : '--'}<span> kg</span></div>
-        <div className="cue">{online ? `board state: ${boardState}` : 'Waiting for board'}</div>
         {hasTarget && (
           <div className={`act-consistency ${Math.abs(deltaPct) <= 5 ? 'good' : ''}`}>
             Target {target} kg · Actual {tension.toFixed(1)} kg · Δ {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%
           </div>
         )}
+        <div className="cue">Force Monitoring</div>
         <TimeChart data={comparisonData}
           series={[{ key: 'curTension', color: '#c77bf0' }, { key: 'prevTension', color: '#4ea1ff' }]}
           unit=" kg" windowS={comparisonWindowS} />
@@ -99,6 +99,17 @@ export default function ActuationPanel({ session, act }) {
 
           {phase === 'idle' && (
             <>
+              <label className="act-level">
+                <span>Exercise</span>
+                <div className="act-kg-row">
+                  {EXERCISES.map((ex) => (
+                    <button key={ex.id} type="button" className={`btn ghost act-kg-btn ${exercise === ex.id ? 'on' : ''}`}
+                      onClick={() => setExercise(ex.id)}>
+                      {ex.label}
+                    </button>
+                  ))}
+                </div>
+              </label>
               <label className="act-level">
                 <span>Force level: {level} kg</span>
                 <div className="act-kg-row">
@@ -147,8 +158,8 @@ export default function ActuationPanel({ session, act }) {
           {phase === 'exercising' && (
             <>
               <div className="cue good">Exercise in progress</div>
-              <div className="act-tension small">{tension.toFixed(1)} kg</div>
-              <button className="btn ghost" onClick={stopSession}>Stop</button>
+              <div className="act-tension small">{target} kg</div>
+              <button className="stop-circle" onClick={stopSession}>Stop</button>
             </>
           )}
 
@@ -171,8 +182,12 @@ export default function ActuationPanel({ session, act }) {
       {rec && (
         <div className="card center accent-actuation act-recommendation">
           <div className="card-head"><h3>Next-weight recommendation</h3></div>
+          <div className="cue">{EXERCISES.find((ex) => ex.id === exercise)?.label}</div>
           <div className="act-tension small">{rec.kg} kg</div>
           <div className="cue">{rec.reason}</div>
+          <div className="cue">
+            PT recommended: {EXERCISES.find((ex) => ex.id === exercise)?.ptReps} reps
+          </div>
           {isClinician && rec.status === 'pending' && (
             <div className="act-summary-actions">
               <button className="btn download" onClick={() => respondRecommendation(true)}>Approve</button>
@@ -207,11 +222,8 @@ export default function ActuationPanel({ session, act }) {
             </button>
           </div>
           <div className="cue">Press and hold</div>
+          <button className="stop-circle" onClick={forceStop}>Force stop</button>
         </div>
-      )}
-
-      {!isClinician && (
-        <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
       )}
 
       <ActuationLogCard refreshKey={logRefreshKey} />
