@@ -14,8 +14,12 @@ just the angle - a plain angle-over-time log can't tell "the sensor's own
 fusion drifted" apart from "something in the relative-orientation math",
 the raw quaternions can.
 
-Storage: at the default 2s interval, a full 8-hour run is only ~3-4 MB
+Storage: at the default 1s interval, a full 8-hour run is only ~6-8 MB
 (two rows/sample, ~150 bytes/row). Safe to leave running overnight.
+
+This is a standalone script, not part of the dashboard - it only runs when
+launched by hand, and only for as long as it's left running. Opening the
+dashboard in a browser has no effect on it either way.
 
 Usage (any machine that can reach the dashboard, doesn't need this repo's venv):
     pip install websockets
@@ -75,7 +79,7 @@ async def _run(url: str, interval_s: float, out_path: str) -> None:
     start_t = time.monotonic()
     last_write_t = 0.0
     rows_written = 0
-    print(f"# knee_drift_logger: logging to {out_path} every {interval_s}s - Ctrl+C to stop")
+    print(f"# knee_drift_logger: logging to {os.path.abspath(out_path)} every {interval_s}s - Ctrl+C to stop")
 
     while True:
         try:
@@ -112,7 +116,7 @@ async def _run(url: str, interval_s: float, out_path: str) -> None:
                         f.flush()
                         last_write_t = now_t
                         rows_written += 1
-                        if rows_written % 30 == 0:  # ~ every minute at the default interval
+                        if rows_written % 60 == 0:  # ~ every minute at the default 1s interval
                             l = knee.get("left", {}).get("angle")
                             r = knee.get("right", {}).get("angle")
                             elapsed_min = (now_t - start_t) / 60
@@ -126,7 +130,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--url", default=os.environ.get("PASS_DASHBOARD_URL", "http://localhost:8000"),
                      help="Dashboard base URL (http/https/ws/wss all accepted), default http://localhost:8000")
-    ap.add_argument("--interval", type=float, default=2.0, help="Seconds between logged samples (default 2.0)")
+    ap.add_argument("--interval", type=float, default=1.0, help="Seconds between logged samples (default 1.0)")
     ap.add_argument("--out", default=None, help="Output CSV path (default knee_drift_<timestamp>.csv)")
     args = ap.parse_args()
 
