@@ -141,6 +141,7 @@ async def api_actuation_session(request: Request) -> dict:
             target_kg=float(body["target"]), duration_s=float(body["durationS"]),
             peak_kg=float(body["peak"]), avg_kg=float(body["avg"]),
             samples=int(body["samples"]), completed=bool(body["completed"]),
+            samples_series=body.get("samplesSeries"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"bad session payload: {exc}")
@@ -152,6 +153,16 @@ async def api_actuation_session(request: Request) -> dict:
 @app.get("/api/actuation/sessions")
 async def api_actuation_sessions(limit: int = 50) -> dict:
     return {"sessions": sessions.get_sessions(limit=limit)}
+
+
+@app.get("/api/actuation/session/latest")
+async def api_actuation_session_latest() -> dict:
+    """The most recent session INCLUDING its full tension curve - fetched by
+    the frontend when a new session starts, so the live chart can plot the
+    session in progress against whatever this returns right now (see
+    ActuationPanel.jsx's startSession). Must be read before the new session
+    finishes and logs itself, or "latest" would just be itself."""
+    return {"session": sessions.get_latest_session_with_samples()}
 
 
 @app.post("/api/actuation/recommendation/respond")

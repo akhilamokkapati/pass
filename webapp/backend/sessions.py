@@ -15,6 +15,7 @@ what this feature is for.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sqlite3
 import threading
@@ -49,26 +50,42 @@ def _get_conn() -> sqlite3.Connection:
                 peak_kg REAL NOT NULL,
                 avg_kg REAL NOT NULL,
                 samples INTEGER NOT NULL,
-                completed INTEGER NOT NULL
+                completed INTEGER NOT NULL,
+                samples_series TEXT
             )
         """)
+        # Migration for DBs created before samples_series existed - SQLite has
+        # no "ADD COLUMN IF NOT EXISTS", so just swallow the duplicate-column
+        # error on a DB that already has it.
+        try:
+            _conn.execute("ALTER TABLE actuation_sessions ADD COLUMN samples_series TEXT")
+        except sqlite3.OperationalError:
+            pass
         _conn.commit()
     return _conn
 
 
 def log_session(target_kg: float, duration_s: float, peak_kg: float, avg_kg: float,
-                 samples: int, completed: bool) -> dict:
+                 samples: int, completed: bool, samples_series: list[float] | None = None) -> dict:
     """Record one finished session (completed normally via Stop, or cut short
     via Force Stop mid-exercise - `completed` distinguishes the two). A forced
     stop is itself a meaningful signal for the recommendation ("this was too
-    much"), so it's logged too, not discarded."""
+    much"), so it's logged too, not discarded.
+
+    samples_series is the raw per-tick tension readings for the whole session
+    (not just the peak/avg summary) - stored as JSON text so the NEXT
+    session's live chart can plot itself against this one (see
+    get_latest_session_with_samples). Optional/nullable because older rows
+    predate this column and the summary-only endpoints don't need it."""
     ended_at = datetime.now(timezone.utc).isoformat()
+    series_json = json.dumps(samples_series) if samples_series is not None else None
     with _lock:
         conn = _get_conn()
         cur = conn.execute(
-            "INSERT INTO actuation_sessions (ended_at, target_kg, duration_s, peak_kg, avg_kg, samples, completed) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (ended_at, target_kg, duration_s, peak_kg, avg_kg, samples, 1 if completed else 0),
+            "INSERT INTO actuation_sessions "
+            "(ended_at, target_kg, duration_s, peak_kg, avg_kg, samples, completed, samples_series) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (ended_at, target_kg, duration_s, peak_kg, avg_kg, samples, 1 if completed else 0, series_json),
         )
         conn.commit()
         row_id = cur.lastrowid
@@ -77,7 +94,9 @@ def log_session(target_kg: float, duration_s: float, peak_kg: float, avg_kg: flo
 
 
 def get_sessions(limit: int = 50) -> list[dict]:
-    """Most recent sessions first."""
+    """Most recent sessions first. Summary fields only (no samples_series) -
+    this feeds the Session tab's log table, which doesn't need the full
+    per-tick curve for every row in the list."""
     with _lock:
         conn = _get_conn()
         rows = conn.execute(
@@ -90,6 +109,25 @@ def get_sessions(limit: int = 50) -> list[dict]:
          "peak": r[4], "avg": r[5], "samples": r[6], "completed": bool(r[7])}
         for r in rows
     ]
+
+
+def get_latest_session_with_samples() -> dict | None:
+    """The single most recent session, including its full samples_series -
+    used by the live tension chart to compare the session in progress against
+    the one before it. Returns None if there's no history yet, or an empty
+    list for samplesSeries if that particular session predates this column."""
+    with _lock:
+        conn = _get_conn()
+        row = conn.execute(
+            "SELECT id, ended_at, target_kg, duration_s, peak_kg, avg_kg, samples, completed, samples_series "
+            "FROM actuation_sessions ORDER BY id DESC LIMIT 1",
+        ).fetchone()
+    if row is None:
+        return None
+    samples_series = json.loads(row[8]) if row[8] else []
+    return {"id": row[0], "endedAt": row[1], "target": row[2], "durationS": row[3],
+            "peak": row[4], "avg": row[5], "samples": row[6], "completed": bool(row[7]),
+            "samplesSeries": samples_series}
 
 
 def recommend_next_kg(kg_options: list[float]) -> dict | None:

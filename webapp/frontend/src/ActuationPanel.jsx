@@ -54,6 +54,12 @@ function summarizeSession(s) {
 
 const COUNTDOWN_S = 3
 const JOG_REPEAT_MS = 150
+// Samples are pushed once per WebSocket tick while phase === 'exercising'
+// (see the useEffect below), and the backend broadcasts at a fixed 20 Hz
+// (main.py's _broadcaster) - so index * this constant approximates each
+// sample's elapsed time within its session. Good enough for a comparison
+// chart; not a precision timing claim.
+const SAMPLE_DT_S = 0.05
 const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
 // Preset force-level buttons (kg) replacing the old 0-100 slider. Sent to the
 // board as-is (raw kg), matching set_force/twist's existing unit convention -
@@ -103,8 +109,21 @@ export default function ActuationPanel({ m, session }) {
   const [countdown, setCountdown] = useState(COUNTDOWN_S)
   const [summary, setSummary] = useState(null)
   const [logRefreshKey, setLogRefreshKey] = useState(0)
+  // The previous session's full tension curve, for the live chart to compare
+  // the in-progress session against - frozen at whatever it was when THIS
+  // session started (see startSession), not re-fetched after logging, or
+  // "previous" would immediately become the session that just finished.
+  const [previousSamples, setPreviousSamples] = useState([])
   const sessionRef = useRef({ startedAt: null, samples: [], target: 0 })
   const jogTimer = useRef(null)
+
+  const fetchPreviousSamples = () => {
+    fetch('/api/actuation/session/latest')
+      .then((res) => res.json())
+      .then((data) => setPreviousSamples(data?.session?.samplesSeries || []))
+      .catch(() => {})
+  }
+  useEffect(fetchPreviousSamples, [])
 
   useEffect(() => {
     if (phase !== 'countdown') return
@@ -134,6 +153,7 @@ export default function ActuationPanel({ m, session }) {
   useEffect(() => () => clearInterval(jogTimer.current), [])
 
   const startSession = () => {
+    fetchPreviousSamples()
     setSummary(null)
     setCountdown(COUNTDOWN_S)
     setPhase('countdown')
@@ -155,7 +175,7 @@ export default function ActuationPanel({ m, session }) {
     setPhase('summary')
     postJson('/api/actuation/session', {
       target: s.target, durationS, peak, avg, samples: s.samples.length,
-      completed: true, kgOptions: KG_OPTIONS,
+      completed: true, kgOptions: KG_OPTIONS, samplesSeries: s.samples,
     }).then(() => setLogRefreshKey((k) => k + 1))
   }
 
@@ -172,7 +192,7 @@ export default function ActuationPanel({ m, session }) {
       const { durationS, peak, avg } = summarizeSession(s)
       postJson('/api/actuation/session', {
         target: s.target, durationS, peak, avg, samples: s.samples.length,
-        completed: false, kgOptions: KG_OPTIONS,
+        completed: false, kgOptions: KG_OPTIONS, samplesSeries: s.samples,
       }).then(() => setLogRefreshKey((k) => k + 1))
     }
     setPhase('idle')
@@ -198,10 +218,24 @@ export default function ActuationPanel({ m, session }) {
   const target = sessionRef.current.target
   const deltaPct = hasTarget && target > 0 ? ((tension - target) / target) * 100 : null
 
-  const chartData = (m?.hist || []).map((h) => ({
-    ...h,
-    actuationTarget: hasTarget ? target : null,
-  }))
+  // Current session (in progress, or just-finished until the next Start
+  // resets it) vs the one immediately before it, both indexed by elapsed
+  // time WITHIN their own session rather than wall-clock time - that's what
+  // makes them comparable on the same axis regardless of when each was run.
+  const curSamples = sessionRef.current.samples
+  const comparisonData = []
+  for (let i = 0; i < previousSamples.length; i++) {
+    comparisonData.push({ t: i * SAMPLE_DT_S, prevTension: previousSamples[i] })
+  }
+  for (let i = 0; i < curSamples.length; i++) {
+    comparisonData.push({ t: i * SAMPLE_DT_S, curTension: curSamples[i] })
+  }
+  comparisonData.sort((a, b) => a.t - b.t)
+  const comparisonWindowS = Math.max(
+    previousSamples.length * SAMPLE_DT_S,
+    curSamples.length * SAMPLE_DT_S,
+    10,
+  )
 
   return (
     <div className="grid actuation">
@@ -214,9 +248,13 @@ export default function ActuationPanel({ m, session }) {
             Target {target} kg · Actual {tension.toFixed(1)} kg · Δ {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%
           </div>
         )}
-        <TimeChart data={chartData}
-          series={[{ key: 'actuationTension', color: '#c77bf0' }, { key: 'actuationTarget', color: '#4ea1ff' }]}
-          unit=" kg" windowS={25} />
+        <TimeChart data={comparisonData}
+          series={[{ key: 'curTension', color: '#c77bf0' }, { key: 'prevTension', color: '#4ea1ff' }]}
+          unit=" kg" windowS={comparisonWindowS} />
+        <div className="act-chart-legend">
+          <span className="legend-inline"><i className="dot" style={{ background: '#c77bf0' }} /> This session</span>
+          <span className="legend-inline"><i className="dot blue" /> Previous session</span>
+        </div>
       </div>
 
       {isClinician ? (

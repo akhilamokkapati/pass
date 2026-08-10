@@ -268,6 +268,7 @@ body {
 .act-kg-btn.on { background: linear-gradient(90deg, #7b3fd6, #c77bf0); color: #fff; border-color: transparent; }
 .act-consistency { font-size: 13px; color: var(--muted); margin-top: 8px; font-weight: 600; }
 .act-consistency.good { color: #3ddc84; }
+.act-chart-legend { display: flex; gap: 16px; justify-content: center; margin-top: 6px; }
 .act-countdown { font-size: 64px; font-weight: 800; color: #c77bf0; margin: 10px 0; }
 .act-session .btn { margin-top: 4px; }
 .act-summary { width: 100%; text-align: left; font-size: 14px; color: var(--text); line-height: 1.9; }
