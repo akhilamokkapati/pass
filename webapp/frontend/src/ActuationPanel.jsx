@@ -36,7 +36,7 @@ import { KG_OPTIONS, EXERCISES } from './useActuationSession.js'
 
 function downloadSummary(summary) {
   const lines = [
-    'PASS actuation session report',
+    'RUNMO actuation session report',
     new Date().toString(),
     `Target level: ${summary.target} kg`,
     `Duration: ${summary.durationS.toFixed(1)} s`,
@@ -48,7 +48,7 @@ function downloadSummary(summary) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `PASS-actuation-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`
+  a.download = `RUNMO-actuation-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`
   document.body.appendChild(a)
   a.click()
   a.remove()

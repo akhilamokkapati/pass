@@ -28,8 +28,8 @@ export default function LoginView({ onAuth }) {
     <div className="auth-wrap">
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="logo">PASS</span>
-          <span className="tagline">Patient Assessment Sensing System</span>
+          <span className="logo">RUNMO</span>
+          <span className="tagline">Helping you run-more</span>
         </div>
 
         <div className="auth-tabs">

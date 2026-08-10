@@ -18,7 +18,7 @@ export function downloadCSV(m) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `PASS-session-${now.toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`
+  a.download = `RUNMO-session-${now.toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`
   document.body.appendChild(a)
   a.click()
   a.remove()
