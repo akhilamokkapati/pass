@@ -4,7 +4,8 @@ Project context for Claude Code. **Read this first.**
 
 **Scope of this file:** TSA (twisted string actuator) resistive actuation
 track only, up to the point of PID tuning. Not covering sensing/dashboard
-subsystems outside this.
+subsystems outside this. For the actuation dashboard panel's UI/UX backlog,
+see `../webapp/ACTUATION_PANEL_TODO.md`.
 
 ## What this is
 
