@@ -19,6 +19,15 @@ hugadb/
 # Exports / build artifacts
 *.pdf
 
+# Local runtime data (regenerated, not source - see webapp/backend/sessions.py
+# and webapp/backend/sensor_log.py)
+webapp/backend/sessions.db
+webapp/backend/sensor_log.db
+
+# Secrets - never commit an API key (see webapp/backend/.env.example)
+.env
+webapp/backend/.env
+
 # OS / editor cruft
 Thumbs.db
 .DS_Store

@@ -19,6 +19,7 @@
  * comma-separated), and matches webapp/backend/ingest.py exactly:
  *   OUT (telemetry, this board -> laptop, UDP :5007):
  *     actuation,seq,t_ms,tension_n,state\n
+ * 
  *     tension_n/state are placeholders (0.0 / "idle") until the strain gauge
  *     and motor are wired in.
  *   IN  (commands, laptop -> this board, UDP :5008):
@@ -41,6 +42,7 @@
 
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <esp_task_wdt.h>
 
 #define UNIT_ID "actuation"
 #define WIFI_SSID "TP-Link_1285"
@@ -49,6 +51,20 @@
 #define TELEMETRY_PORT 5007
 #define COMMAND_PORT   5008
 #define EMIT_MS 200        // 5 Hz heartbeat - plenty for a status-only line
+
+// ---- fault recovery -----------------------------------------------------
+// Hardware watchdog: force-reboots the board if loop() ever truly hangs,
+// instead of it silently dying with the status LED frozen solid, needing a
+// physical power-cycle to notice or fix.
+#define WDT_TIMEOUT_S 8
+// Zombie-WiFi guard: WiFi.status() is a cached flag that can keep reporting
+// WL_CONNECTED after the AP has actually dropped the association. A
+// genuinely joined station always has a real (negative) RSSI, so RSSI==0
+// while "connected" is the tell. Unlike the feet, this board has no periodic
+// re-begin() retry today - the forced disconnect below is what lets
+// auto-reconnect actually kick in instead of streaming into the void.
+#define ZOMBIE_CHECK_MS 3000
+#define ZOMBIE_LIMIT    3
 
 #define LED_PIN 21
 #define LED_ON  LOW
@@ -62,6 +78,20 @@ uint32_t lastEmit = 0;
 uint32_t lastHealth = 0;
 uint32_t rxCount = 0;
 uint32_t udpBeginOk = 0, udpBeginFail = 0, udpEndOk = 0, udpEndFail = 0;
+
+// Arms the hardware watchdog. Called at the END of setup(), after the blocking
+// WiFi-join wait, so normal startup delays never trip a false reboot. Covers
+// both the old and new (core 3.x) esp_task_wdt init signatures so the build
+// doesn't depend on which core version is installed.
+void wdtBegin() {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  esp_task_wdt_config_t wdtConfig = { .timeout_ms = WDT_TIMEOUT_S * 1000, .idle_core_mask = 0, .trigger_panic = true };
+  esp_task_wdt_init(&wdtConfig);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_S, true);
+#endif
+  esp_task_wdt_add(NULL);
+}
 
 void wifiBegin() {
   WiFi.mode(WIFI_STA);
@@ -96,10 +126,28 @@ void setup() {
     Serial.print("# telemetry -> "); Serial.print(dest); Serial.print(":"); Serial.println(TELEMETRY_PORT);
     Serial.print("# commands listening on :"); Serial.println(COMMAND_PORT);
   }
+  wdtBegin();   // arm last, after the blocking WiFi join above is done
 }
 
 void loop() {
   uint32_t now = millis();
+  esp_task_wdt_reset();   // feed the watchdog every pass - see wdtBegin()
+
+  // Zombie-WiFi check (see ZOMBIE_* above).
+  static uint32_t lastZombieCheck = 0;
+  static uint8_t  zombieStreak = 0;
+  if (now - lastZombieCheck >= ZOMBIE_CHECK_MS) {
+    lastZombieCheck = now;
+    if (WiFi.status() == WL_CONNECTED && WiFi.RSSI() == 0) {
+      if (++zombieStreak >= ZOMBIE_LIMIT) {
+        if (Serial) Serial.println("# WARN zombie WiFi (RSSI stuck at 0) - forcing reconnect");
+        WiFi.disconnect();
+        zombieStreak = 0;
+      }
+    } else {
+      zombieStreak = 0;
+    }
+  }
 
   // Yield once per loop so a tight loop() can't monopolize CPU time right
   // when the WiFi stack needs a window to actually transmit - this exact

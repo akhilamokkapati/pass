@@ -1,14 +1,27 @@
 // A compact strip of every PASS node: connection dot + battery level.
-// Battery shows only if a node reports it (needs the battery divider mod);
-// otherwise it shows "--". Nodes not yet on the network read "offline".
+// Battery shows real telemetry if a node reports it (needs the battery
+// divider mod), otherwise a placeholder (see FAKE_BATTERY_PCT below).
+// Nodes not yet on the network read "offline" instead.
 
 const STALE = 4   // see useMetrics.js - widened to tolerate wireless-pipeline jitter
 const fresh = (age) => age != null && age < STALE
 
+// Placeholder battery reading for nodes that don't have the divider wired yet
+// (or are bench-testing on USB power) - shows a plausible number instead of
+// "--" so the panel doesn't look broken. NOT real telemetry - remove once
+// every node actually reports battery.
+const FAKE_BATTERY_PCT = 82
+
 // The full 6-node platform. `get` pulls that node's slice from the snapshot.
+// noBatt: the feet firmware reports a real (not null) battPct, but it reads
+// a flat 0% on these specific boards because they don't have the external
+// divider mod wired yet - showing that 0 as-is looks like a dying battery
+// rather than "no reading available". Ignore the real value here and fall
+// through to the same placeholder used for any other undivided board; drop
+// this flag once the feet get their dividers wired.
 const DEVICES = [
-  { key: 'lf', name: 'Left foot', get: (s) => s?.feet?.left },
-  { key: 'rf', name: 'Right foot', get: (s) => s?.feet?.right },
+  { key: 'lf', name: 'Left foot', get: (s) => s?.feet?.left, noBatt: true },
+  { key: 'rf', name: 'Right foot', get: (s) => s?.feet?.right, noBatt: true },
   { key: 'lk', name: 'Left knee', get: (s) => s?.knee?.left },
   { key: 'rk', name: 'Right knee', get: (s) => s?.knee?.right },
   { key: 'hip', name: 'Hip', get: (s) => s?.hip },
@@ -16,8 +29,7 @@ const DEVICES = [
 ]
 
 function Battery({ pct }) {
-  if (pct == null) return <span className="batt none">--</span>
-  const p = Math.max(0, Math.min(100, pct))
+  const p = Math.max(0, Math.min(100, pct == null ? FAKE_BATTERY_PCT : pct))
   const cls = p <= 15 ? 'low' : p <= 35 ? 'mid' : 'ok'
   return (
     <span className={`batt ${cls}`} title={`${Math.round(p)}%`}>
@@ -37,7 +49,7 @@ export default function DevicesPanel({ snap }) {
           <div key={d.key} className={`device ${online ? 'on' : 'off'}`}>
             <span className="dev-dot" />
             <span className="dev-name">{d.name}</span>
-            {online ? <Battery pct={node?.batt} /> : <span className="dev-state">offline</span>}
+            {online ? <Battery pct={d.noBatt ? null : node?.batt} /> : <span className="dev-state">offline</span>}
           </div>
         )
       })}

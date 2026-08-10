@@ -11,28 +11,28 @@
 // never fire on its own, so a manual "Mark ready" is offered alongside it;
 // it's a real control a user might need anyway (feel-based confirmation),
 // not a fake sensor reading.
+//
+// Role split: the clinician does not run the patient's session - the level
+// picker, Start, in-session Stop, the manual Twist/Untwist jog controls, AND
+// Force Stop are all patient-only, since it's the patient's body wearing/
+// operating the actuator. Instead, the backend (webapp/backend/sessions.py)
+// looks at the patient's logged session history and recommends the next
+// weight to try; the clinician's job on this tab is reviewing that history
+// and approving/rejecting the recommendation, nothing hands-on. The
+// recommendation itself is a nudge, not a lock - once approved it just
+// surfaces a "use this weight" button on the patient's side, it doesn't
+// auto-start anything or block other levels.
+//
+// All the session state/logic (phase, countdown, samples...) lives in
+// useActuationSession.js, called once in App.jsx so it survives switching
+// tabs - this component is just a view over that state (see also
+// ActuationFloatingWidget.jsx, the compact view shown on OTHER tabs while a
+// session is running).
 
-import { useEffect, useRef, useState } from 'react'
 import { StatusPill } from './ui.jsx'
 import TimeChart from './TimeChart.jsx'
-
-const COUNTDOWN_S = 3
-const JOG_REPEAT_MS = 150
-const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
-// Preset force-level buttons (kg) replacing the old 0-100 slider. Sent to the
-// board as-is (raw kg), matching set_force/twist's existing unit convention -
-// tension_n already reads on this same scale, not true SI Newtons.
-const KG_OPTIONS = [2, 4, 6, 8, 10, 12]
-
-async function sendCmd(cmd, value = 0) {
-  try {
-    await fetch('/api/actuation/command', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cmd, value }),
-    })
-  } catch { /* offline - button still gives feedback, command just won't land */ }
-}
+import ActuationLogCard from './ActuationLogCard.jsx'
+import { KG_OPTIONS } from './useActuationSession.js'
 
 function downloadSummary(summary) {
   const lines = [
@@ -55,96 +55,15 @@ function downloadSummary(summary) {
   URL.revokeObjectURL(url)
 }
 
-export default function ActuationPanel({ m }) {
-  const online = !!m?.actuationOk
-  const tension = m?.actuationTension ?? 0
-  const boardState = m?.actuationState ?? null
-
-  const [level, setLevel] = useState(KG_OPTIONS[0])
-  const [phase, setPhase] = useState('idle') // idle | countdown | twisting | ready | exercising | summary
-  const [countdown, setCountdown] = useState(COUNTDOWN_S)
-  const [summary, setSummary] = useState(null)
-  const session = useRef({ startedAt: null, samples: [], target: 0 })
-  const jogTimer = useRef(null)
-
-  useEffect(() => {
-    if (phase !== 'countdown') return
-    if (countdown <= 0) {
-      session.current = { startedAt: null, samples: [], target: level }
-      sendCmd('set_force', level)
-      sendCmd('twist', level)
-      setPhase('twisting')
-      return
-    }
-    const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
-    return () => clearTimeout(t)
-  }, [phase, countdown, level])
-
-  useEffect(() => {
-    if (phase !== 'twisting') return
-    if (online && tension >= session.current.target * READY_MARGIN && session.current.target > 0) {
-      setPhase('ready')
-    }
-  }, [phase, online, tension])
-
-  useEffect(() => {
-    if (phase !== 'exercising') return
-    session.current.samples.push(tension)
-  }, [phase, tension])
-
-  useEffect(() => () => clearInterval(jogTimer.current), [])
-
-  const startSession = () => {
-    setSummary(null)
-    setCountdown(COUNTDOWN_S)
-    setPhase('countdown')
-  }
-
-  const markReady = () => setPhase('ready')
-
-  const beginExercise = () => {
-    session.current.startedAt = Date.now()
-    session.current.samples = []
-    setPhase('exercising')
-  }
-
-  const stopSession = () => {
-    const s = session.current
-    const durationS = s.startedAt ? (Date.now() - s.startedAt) / 1000 : 0
-    const peak = s.samples.reduce((mx, v) => Math.max(mx, v), 0)
-    const avg = s.samples.length ? s.samples.reduce((a, v) => a + v, 0) / s.samples.length : 0
-    setSummary({ target: s.target, durationS, peak, avg, samples: s.samples.length })
-    sendCmd('untwist', 1)
-    setPhase('summary')
-  }
-
-  const forceStop = () => {
-    clearInterval(jogTimer.current)
-    sendCmd('stop', 0)
-    setPhase('idle')
-  }
-
-  const jogStart = (cmd) => {
-    sendCmd(cmd, 1)
-    clearInterval(jogTimer.current)
-    jogTimer.current = setInterval(() => sendCmd(cmd, 1), JOG_REPEAT_MS)
-  }
-  const jogStop = () => {
-    clearInterval(jogTimer.current)
-    sendCmd('stop', 0)
-  }
-
-  // Target-vs-actual consistency (supposed force vs what the strain gauge
-  // reports) - only meaningful once a session has actually commanded a
-  // target; before that there's nothing to be consistent WITH.
-  const hasTarget = ['twisting', 'ready', 'exercising'].includes(phase) && session.current.target > 0
-  const target = session.current.target
-  const deltaPct = hasTarget && target > 0 ? ((tension - target) / target) * 100 : null
-
-  const chartData = (m?.hist || []).map((h) => ({
-    ...h,
-    actuationTarget: hasTarget ? target : null,
-  }))
+export default function ActuationPanel({ session, act }) {
+  const isClinician = session?.role === 'clinician'
+  const {
+    online, tension, boardState, rec,
+    level, setLevel, phase, setPhase, countdown, summary, logRefreshKey,
+    startSession, markReady, beginExercise, stopSession, forceStop,
+    respondRecommendation, jogStart, jogStop,
+    hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
+  } = act
 
   return (
     <div className="grid actuation">
@@ -157,94 +76,145 @@ export default function ActuationPanel({ m }) {
             Target {target} kg · Actual {tension.toFixed(1)} kg · Δ {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%
           </div>
         )}
-        <TimeChart data={chartData}
-          series={[{ key: 'actuationTension', color: '#c77bf0' }, { key: 'actuationTarget', color: '#4ea1ff' }]}
-          unit=" kg" windowS={25} />
-      </div>
-
-      <div className="card center accent-actuation act-session">
-        <div className="card-head"><h3>Session</h3></div>
-
-        {phase === 'idle' && (
-          <>
-            <label className="act-level">
-              <span>Force level: {level} kg</span>
-              <div className="act-kg-row">
-                {KG_OPTIONS.map((kg) => (
-                  <button key={kg} type="button" className={`btn ghost act-kg-btn ${level === kg ? 'on' : ''}`}
-                    onClick={() => setLevel(kg)}>
-                    {kg} kg
-                  </button>
-                ))}
-              </div>
-            </label>
-            <button className="btn download" onClick={startSession} disabled={!online}>
-              Start session
-            </button>
-            {!online && <div className="cue">Board offline - connect it to start</div>}
-          </>
-        )}
-
-        {phase === 'countdown' && (
-          <div className="act-countdown">{countdown}</div>
-        )}
-
-        {phase === 'twisting' && (
-          <>
-            <div className="cue">Twisting to {level} kg…</div>
-            <div className="act-tension small">{tension.toFixed(1)} / {level} kg</div>
-            <button className="btn ghost" onClick={markReady}>Mark ready</button>
-          </>
-        )}
-
-        {phase === 'ready' && (
-          <>
-            <div className="cue good">Ready - twisted to target</div>
-            <button className="btn download" onClick={beginExercise}>Begin exercise</button>
-          </>
-        )}
-
-        {phase === 'exercising' && (
-          <>
-            <div className="cue good">Exercise in progress</div>
-            <div className="act-tension small">{tension.toFixed(1)} kg</div>
-            <button className="btn ghost" onClick={stopSession}>Stop</button>
-          </>
-        )}
-
-        {phase === 'summary' && summary && (
-          <div className="act-summary">
-            <div className="act-summary-title">Session complete</div>
-            <div>Target: {summary.target} kg</div>
-            <div>Duration: {summary.durationS.toFixed(1)} s</div>
-            <div>Peak tension: {summary.peak.toFixed(1)} kg</div>
-            <div>Avg tension: {summary.avg.toFixed(1)} kg</div>
-            <div className="act-summary-actions">
-              <button className="btn ghost" onClick={() => downloadSummary(summary)}>Download report</button>
-              <button className="btn download" onClick={() => setPhase('idle')}>New session</button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="card center accent-actuation">
-        <div className="card-head"><h3>Manual control</h3></div>
-        <div className="act-jog">
-          <button className="btn ghost"
-            onMouseDown={() => jogStart('twist')} onMouseUp={jogStop} onMouseLeave={jogStop}
-            onTouchStart={() => jogStart('twist')} onTouchEnd={jogStop}>
-            Twist
-          </button>
-          <button className="btn ghost"
-            onMouseDown={() => jogStart('untwist')} onMouseUp={jogStop} onMouseLeave={jogStop}
-            onTouchStart={() => jogStart('untwist')} onTouchEnd={jogStop}>
-            Untwist
-          </button>
+        <TimeChart data={comparisonData}
+          series={[{ key: 'curTension', color: '#c77bf0' }, { key: 'prevTension', color: '#4ea1ff' }]}
+          unit=" kg" windowS={comparisonWindowS} />
+        <div className="act-chart-legend">
+          <span className="legend-inline"><i className="dot" style={{ background: '#c77bf0' }} /> This session</span>
+          <span className="legend-inline"><i className="dot blue" /> Previous session</span>
         </div>
-        <div className="cue">Press and hold</div>
       </div>
 
-      <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
+      {isClinician ? (
+        <div className="card center accent-actuation act-session">
+          <div className="card-head"><h3>Session</h3></div>
+          <div className="cue">
+            Session control belongs to the patient - use the recommendation card to review their
+            progress and approve or reject the next weight.
+          </div>
+        </div>
+      ) : (
+        <div className="card center accent-actuation act-session">
+          <div className="card-head"><h3>Session</h3></div>
+
+          {phase === 'idle' && (
+            <>
+              <label className="act-level">
+                <span>Force level: {level} kg</span>
+                <div className="act-kg-row">
+                  {KG_OPTIONS.map((kg) => (
+                    <button key={kg} type="button" className={`btn ghost act-kg-btn ${level === kg ? 'on' : ''}`}
+                      onClick={() => setLevel(kg)}>
+                      {kg} kg
+                    </button>
+                  ))}
+                </div>
+              </label>
+              {rec?.status === 'approved' && (
+                <div className="cue good">
+                  Your therapist recommends {rec.kg} kg next.{' '}
+                  <button type="button" className="btn ghost act-kg-btn" onClick={() => setLevel(rec.kg)}>
+                    Use {rec.kg} kg
+                  </button>
+                </div>
+              )}
+              <button className="btn download" onClick={startSession} disabled={!online}>
+                Start session
+              </button>
+              {!online && <div className="cue">Board offline - connect it to start</div>}
+            </>
+          )}
+
+          {phase === 'countdown' && (
+            <div className="act-countdown">{countdown}</div>
+          )}
+
+          {phase === 'twisting' && (
+            <>
+              <div className="cue">Twisting to {level} kg…</div>
+              <div className="act-tension small">{tension.toFixed(1)} / {level} kg</div>
+              <button className="btn ghost" onClick={markReady}>Mark ready</button>
+            </>
+          )}
+
+          {phase === 'ready' && (
+            <>
+              <div className="cue good">Ready - twisted to target</div>
+              <button className="btn download" onClick={beginExercise}>Begin exercise</button>
+            </>
+          )}
+
+          {phase === 'exercising' && (
+            <>
+              <div className="cue good">Exercise in progress</div>
+              <div className="act-tension small">{tension.toFixed(1)} kg</div>
+              <button className="btn ghost" onClick={stopSession}>Stop</button>
+            </>
+          )}
+
+          {phase === 'summary' && summary && (
+            <div className="act-summary">
+              <div className="act-summary-title">Session complete</div>
+              <div>Target: {summary.target} kg</div>
+              <div>Duration: {summary.durationS.toFixed(1)} s</div>
+              <div>Peak tension: {summary.peak.toFixed(1)} kg</div>
+              <div>Avg tension: {summary.avg.toFixed(1)} kg</div>
+              <div className="act-summary-actions">
+                <button className="btn ghost" onClick={() => downloadSummary(summary)}>Download report</button>
+                <button className="btn download" onClick={() => setPhase('idle')}>New session</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {rec && (
+        <div className="card center accent-actuation act-recommendation">
+          <div className="card-head"><h3>Next-weight recommendation</h3></div>
+          <div className="act-tension small">{rec.kg} kg</div>
+          <div className="cue">{rec.reason}</div>
+          {isClinician && rec.status === 'pending' && (
+            <div className="act-summary-actions">
+              <button className="btn download" onClick={() => respondRecommendation(true)}>Approve</button>
+              <button className="btn ghost" onClick={() => respondRecommendation(false)}>Reject</button>
+            </div>
+          )}
+          {isClinician && rec.status === 'approved' && (
+            <div className="cue good">Approved - patient notified</div>
+          )}
+          {isClinician && rec.status === 'rejected' && (
+            <div className="cue">Rejected</div>
+          )}
+          {!isClinician && rec.status === 'pending' && (
+            <div className="cue">Waiting for your therapist to review this</div>
+          )}
+        </div>
+      )}
+
+      {!isClinician && (
+        <div className="card center accent-actuation">
+          <div className="card-head"><h3>Manual control</h3></div>
+          <div className="act-jog">
+            <button className="btn ghost"
+              onMouseDown={() => jogStart('twist')} onMouseUp={jogStop} onMouseLeave={jogStop}
+              onTouchStart={() => jogStart('twist')} onTouchEnd={jogStop}>
+              Twist
+            </button>
+            <button className="btn ghost"
+              onMouseDown={() => jogStart('untwist')} onMouseUp={jogStop} onMouseLeave={jogStop}
+              onTouchStart={() => jogStart('untwist')} onTouchEnd={jogStop}>
+              Untwist
+            </button>
+          </div>
+          <div className="cue">Press and hold</div>
+        </div>
+      )}
+
+      {!isClinician && (
+        <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
+      )}
+
+      <ActuationLogCard refreshKey={logRefreshKey} />
     </div>
   )
 }

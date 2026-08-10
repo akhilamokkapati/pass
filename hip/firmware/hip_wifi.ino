@@ -17,6 +17,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <esp_task_wdt.h>
 #include "SparkFun_BNO080_Arduino_Library.h"
 
 // ===== identity + network (same router as feet/knee) =====
@@ -56,6 +57,19 @@ static const uint32_t POST_ENABLE_MS = 50;
 static const uint32_t SILENT_TIMEOUT_MS = 1000;
 static const uint32_t HEALTH_MS         = 5000;
 
+// ---- fault recovery ---------------------------------------------------
+// Hardware watchdog: if loop() ever truly hangs (e.g. an I2C bus lockup from
+// the BNO085's clock-stretching), this force-reboots the board instead of it
+// silently dying with the status LED frozen solid, needing a power-cycle.
+static const uint32_t WDT_TIMEOUT_S = 8;
+// Zombie-WiFi guard: WiFi.status() is a cached flag that can keep reporting
+// WL_CONNECTED after the AP has actually dropped the association. A
+// genuinely joined station always has a real (negative) RSSI, so RSSI==0
+// while "connected" is the tell - force a disconnect after enough bad reads
+// so auto-reconnect actually rejoins.
+static const uint32_t ZOMBIE_CHECK_MS = 3000;
+static const uint8_t  ZOMBIE_LIMIT    = 3;
+
 WiFiUDP udp;
 IPAddress dest;
 BNO080 imu;
@@ -85,6 +99,20 @@ bool initSensor() {
   }
   if (Serial) Serial.println("# hip BNO085 NOT FOUND (check SDA=D4/SCL=D5, 3V3, PS0/PS1->GND, ADO)");
   return false;
+}
+
+// Arms the hardware watchdog. Called at the END of setup(), after the blocking
+// WiFi-join wait and sensor-init retries are done, so normal startup delays
+// never trip a false reboot. Covers both the old and new (core 3.x) esp_task_wdt
+// init signatures so the build doesn't depend on which core version is installed.
+void wdtBegin() {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  esp_task_wdt_config_t wdtConfig = { .timeout_ms = WDT_TIMEOUT_S * 1000, .idle_core_mask = 0, .trigger_panic = true };
+  esp_task_wdt_init(&wdtConfig);
+#else
+  esp_task_wdt_init(WDT_TIMEOUT_S, true);
+#endif
+  esp_task_wdt_add(NULL);
 }
 
 // Minimal join sequence, matching the working feet, plus setSleep(false) so the
@@ -129,11 +157,31 @@ void setup() {
 
   uint32_t now = millis();
   lastReport = now; lastHealth = now;
+
+  wdtBegin();   // arm last, after all the blocking setup work above is done
+
   if (Serial) Serial.println("# streaming: hip,seq,t_ms,qw,qx,qy,qz");
 }
 
 void loop() {
   uint32_t now = millis();
+  esp_task_wdt_reset();   // feed the watchdog every pass - see wdtBegin()
+
+  // Zombie-WiFi check (see ZOMBIE_* above).
+  static uint32_t lastZombieCheck = 0;
+  static uint8_t  zombieStreak = 0;
+  if (now - lastZombieCheck >= ZOMBIE_CHECK_MS) {
+    lastZombieCheck = now;
+    if (WiFi.status() == WL_CONNECTED && WiFi.RSSI() == 0) {
+      if (++zombieStreak >= ZOMBIE_LIMIT) {
+        if (Serial) Serial.println("# WARN zombie WiFi (RSSI stuck at 0) - forcing reconnect");
+        WiFi.disconnect();
+        zombieStreak = 0;
+      }
+    } else {
+      zombieStreak = 0;
+    }
+  }
 
   // status LED: solid = joined, blinking = searching
   if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LED_ON);

@@ -81,7 +81,7 @@ function Foot({ side, zones, data, fullScale, resetKey }) {
           <circle cx={copWX / total} cy={copWY / total} r={5} className="cop-dot" />
         )}
       </svg>
-      <div className="foot-load">{ok ? `load ${Math.round(total)}` : '—'}</div>
+      <div className="foot-load">{ok ? `load ${Math.round(total)}` : '--'}</div>
     </div>
   )
 }
