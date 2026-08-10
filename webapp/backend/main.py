@@ -165,6 +165,23 @@ async def api_actuation_session_latest() -> dict:
     return {"session": sessions.get_latest_session_with_samples()}
 
 
+@app.post("/api/actuation/session/remark")
+async def api_actuation_session_remark(request: Request) -> dict:
+    """Clinician logs a remark against a specific session (the Recommendation
+    card - see sessions.add_remark)."""
+    body = await request.json()
+    session_id = body.get("sessionId")
+    text = (body.get("text") or "").strip()
+    if not session_id or not text:
+        raise HTTPException(status_code=400, detail="missing sessionId or text")
+    return {"remark": sessions.add_remark(int(session_id), text)}
+
+
+@app.get("/api/actuation/session/{session_id}/remarks")
+async def api_actuation_session_remarks(session_id: int) -> dict:
+    return {"remarks": sessions.get_remarks(session_id)}
+
+
 @app.post("/api/actuation/recommendation/respond")
 async def api_actuation_recommendation_respond(request: Request) -> dict:
     """Clinician approves or rejects the pending recommendation. The result

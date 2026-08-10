@@ -61,7 +61,7 @@ export default function ActuationPanel({ session, act }) {
     online, tension, rec,
     level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
-    respondRecommendation, jogStart, jogStop,
+    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark, jogStart, jogStop,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   } = act
   const selectedExercise = EXERCISES.find((ex) => ex.id === exercise)
@@ -98,7 +98,7 @@ export default function ActuationPanel({ session, act }) {
         </div>
       ) : (
         <div className="card center accent-actuation act-session">
-          <div className="card-head"><h3>Session</h3></div>
+          <div className="card-head"><h3>Resistive Training</h3></div>
 
           {phase === 'idle' && (
             <>
@@ -115,7 +115,7 @@ export default function ActuationPanel({ session, act }) {
               </label>
               <label className="act-level">
                 <span>Force level: {level} kg</span>
-                <div className="act-kg-row">
+                <div className="act-kg-row act-kg-row-vertical">
                   {KG_OPTIONS.map((kg) => (
                     <button key={kg} type="button" className={`btn ghost act-kg-btn ${level === kg ? 'on' : ''}`}
                       onClick={() => setLevel(kg)}>
@@ -145,7 +145,7 @@ export default function ActuationPanel({ session, act }) {
 
           {phase === 'twisting' && (
             <>
-              <div className="cue">Twisting to {level} kg…</div>
+              <div className="cue">Setting up…</div>
               <div className="act-tension small">{tension.toFixed(1)} / {level} kg</div>
               <button className="btn ghost" onClick={markReady}>Mark ready</button>
             </>
@@ -153,7 +153,7 @@ export default function ActuationPanel({ session, act }) {
 
           {phase === 'ready' && (
             <>
-              <div className="cue good">Ready - twisted to target</div>
+              <div className="cue good">Ready</div>
               <button className="btn download" onClick={beginExercise}>Begin exercise</button>
             </>
           )}
@@ -214,6 +214,20 @@ export default function ActuationPanel({ session, act }) {
           )}
           {!isClinician && rec.status === 'approved' && (
             <span className="pill live"><i className="pill-dot" />Approved by your therapist</span>
+          )}
+          {isClinician && (
+            <div className="act-remark">
+              <textarea
+                className="act-remark-input"
+                placeholder="Add a remark about this session…"
+                value={remarkText}
+                onChange={(e) => setRemarkText(e.target.value)}
+              />
+              <button className="btn ghost" onClick={() => logRemark(rec.basedOnSessionId)} disabled={!remarkText.trim()}>
+                Log remark
+              </button>
+              {remarkStatus === 'saved' && <div className="cue good">Remark logged</div>}
+            </div>
           )}
         </div>
       )}

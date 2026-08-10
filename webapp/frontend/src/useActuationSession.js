@@ -170,6 +170,18 @@ export function useActuationSession(m) {
   const respondRecommendation = (approved) =>
     postJson('/api/actuation/recommendation/respond', { approved })
 
+  const [remarkText, setRemarkText] = useState('')
+  const [remarkStatus, setRemarkStatus] = useState(null) // null | 'saved'
+  const logRemark = async (sessionId) => {
+    const text = remarkText.trim()
+    if (!sessionId || !text) return
+    const res = await postJson('/api/actuation/session/remark', { sessionId, text })
+    if (res?.remark) {
+      setRemarkText('')
+      setRemarkStatus('saved')
+    }
+  }
+
   const jogStart = (cmd) => {
     sendCmd(cmd, 1)
     clearInterval(jogTimer.current)
@@ -210,7 +222,7 @@ export function useActuationSession(m) {
     online, tension, boardState, rec,
     level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
-    respondRecommendation, jogStart, jogStop,
+    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark, jogStart, jogStop,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   }
 }

@@ -29,24 +29,27 @@ webapp-only.
 
 ## Session
 
-- [ ] Rename "Session" -> "Resistive Training"
-- [ ] Add exercise selector: knee extension / hamstring curl
+- [x] Rename "Session" -> "Resistive Training"
+- [x] Add exercise selector: knee extension / hamstring curl (already built
+      as part of the Recommendation work above, reused here)
 - [ ] Add reps selector: 3, 5, 8, 10, 12 - mainly to label the dataset for
       later logging/reporting, not a live rep counter input
-- [ ] Force-level buttons (currently the `KG_OPTIONS` row) -> vertical layout
-      instead of horizontal
+- [x] Force-level buttons (currently the `KG_OPTIONS` row) -> vertical layout
+      instead of horizontal (added `.act-kg-row-vertical`, force-level row
+      only - exercise selector stays horizontal)
 - [ ] "Start session" should wait through a 3-2-1 countdown before the motor
       starts twisting (countdown UI already exists - confirm/wire the actual
       twist command to fire only after it completes)
-- [ ] Show "Setting up" while the motor is twisting toward the target (maps
-      to the existing `twisting` phase - just needs the right label)
-- [ ] Show "Ready" once the strain gauge reading matches the set force input
-      (maps to the existing `ready` phase/`READY_MARGIN` logic)
-- [ ] "Begin exercise" - notifies the system the patient is about to start
-      moving. **Open question from initial request: is this a real system
-      signal something downstream needs, or purely UX polish (e.g. just
-      starts the on-screen rep counter)? Needs a decision before/while
-      implementing.**
+- [x] Show "Setting up" while the motor is twisting toward the target (was
+      "Twisting to X kg…")
+- [x] Show "Ready" once the strain gauge reading matches the set force input
+      (was "Ready - twisted to target")
+- [x] "Begin exercise" - notifies the system the patient is about to start
+      moving. **Decided: purely a UX layer, not a real system/firmware
+      signal.** Confirmed the current `beginExercise()` in
+      `useActuationSession.js` already matches this - it only sets local
+      state (`startedAt`, resets `samples`, flips `phase` to `exercising`),
+      no `sendCmd()` call to the board. No code change needed.
 - [ ] During "Exercise in progress": pull rep count from the IMU/knee sensing
       side, show reps done vs. reps remaining (needs a data source - knee
       module doesn't currently feed the actuation panel; this is a new
@@ -86,6 +89,15 @@ webapp-only.
       input** - each exercise in `EXERCISES` has a hardcoded `ptReps` (knee
       extension: 10, hamstring curl: 8). Swap for a real source once one
       exists (clinician-entered? a fixed table someone provides?).
+- [x] Clinician remarks input, logged against the session the current
+      recommendation is based on (`rec.basedOnSessionId`). New
+      `session_remarks` table in `sessions.py` (append-only - a clinician can
+      leave more than one remark over time, nothing gets overwritten), new
+      endpoints `POST /api/actuation/session/remark` and
+      `GET /api/actuation/session/{id}/remarks`. Only the log-a-remark UI was
+      built (textarea + button, clinician-only); nothing currently displays
+      logged remarks back anywhere (e.g. in `ActuationLogCard`) - flag if
+      that's wanted next.
 
 ## Manual Control
 

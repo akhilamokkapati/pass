@@ -61,6 +61,18 @@ def _get_conn() -> sqlite3.Connection:
             _conn.execute("ALTER TABLE actuation_sessions ADD COLUMN samples_series TEXT")
         except sqlite3.OperationalError:
             pass
+        # A separate append-only table rather than a single remarks column on
+        # actuation_sessions - a clinician may want to leave more than one
+        # note on the same session over time, and this way nothing overwrites
+        # an earlier remark.
+        _conn.execute("""
+            CREATE TABLE IF NOT EXISTS session_remarks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                text TEXT NOT NULL
+            )
+        """)
         _conn.commit()
     return _conn
 
@@ -128,6 +140,34 @@ def get_latest_session_with_samples() -> dict | None:
     return {"id": row[0], "endedAt": row[1], "target": row[2], "durationS": row[3],
             "peak": row[4], "avg": row[5], "samples": row[6], "completed": bool(row[7]),
             "samplesSeries": samples_series}
+
+
+def add_remark(session_id: int, text: str) -> dict:
+    """Log a clinician remark against a specific session (see the
+    Recommendation card - remarks are entered next to whatever session the
+    current recommendation is based on)."""
+    created_at = datetime.now(timezone.utc).isoformat()
+    with _lock:
+        conn = _get_conn()
+        cur = conn.execute(
+            "INSERT INTO session_remarks (session_id, created_at, text) VALUES (?, ?, ?)",
+            (session_id, created_at, text),
+        )
+        conn.commit()
+        row_id = cur.lastrowid
+    return {"id": row_id, "sessionId": session_id, "createdAt": created_at, "text": text}
+
+
+def get_remarks(session_id: int) -> list[dict]:
+    """Most recent remarks first, for one session."""
+    with _lock:
+        conn = _get_conn()
+        rows = conn.execute(
+            "SELECT id, session_id, created_at, text FROM session_remarks "
+            "WHERE session_id = ? ORDER BY id DESC",
+            (session_id,),
+        ).fetchall()
+    return [{"id": r[0], "sessionId": r[1], "createdAt": r[2], "text": r[3]} for r in rows]
 
 
 def recommend_next_kg(kg_options: list[float]) -> dict | None:

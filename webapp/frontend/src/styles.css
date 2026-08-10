@@ -264,7 +264,9 @@ body {
 .act-level span { color: var(--muted); font-size: 13px; font-weight: 600; }
 .act-level input[type="range"] { width: 100%; accent-color: #c77bf0; }
 .act-kg-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.act-kg-row-vertical { flex-direction: column; flex-wrap: nowrap; }
 .act-kg-btn { flex: 1 1 calc(33% - 8px); margin-top: 0; padding: 8px 6px; font-size: 13px; }
+.act-kg-row-vertical .act-kg-btn { flex: 1 1 auto; width: 100%; }
 .act-kg-btn.on { background: linear-gradient(90deg, #7b3fd6, #c77bf0); color: #fff; border-color: transparent; }
 .act-consistency { font-size: 13px; color: var(--muted); margin-top: 8px; font-weight: 600; }
 .act-consistency.good { color: #3ddc84; }
@@ -277,6 +279,13 @@ body {
 .act-summary-actions .btn { margin-top: 0; flex: 1; }
 .act-rec-row { display: flex; justify-content: space-around; align-items: flex-start; width: 100%; gap: 12px; margin: 4px 0 10px; }
 .act-rec-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.act-remark { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 12px; }
+.act-remark-input {
+  width: 100%; min-height: 64px; resize: vertical; font: inherit;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text);
+}
+.act-remark-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .act-jog { display: flex; gap: 10px; width: 100%; }
 .act-jog .btn { flex: 1; margin-top: 4px; user-select: none; }
 
