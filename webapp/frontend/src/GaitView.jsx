@@ -36,6 +36,8 @@ export default function GaitView({ m }) {
               key={modelId}
               modelPath={model.path}
               scale={model.scale}
+              position={model.position}
+              rig={model.rig}
               kneeLDeg={kneeLOk ? m.kneeLAngle : 0}
               kneeRDeg={kneeROk ? m.kneeRAngle : 0}
               hipTiltDeg={(m?.hipOk && m?.hipTiltCalibrated) ? m.hipTiltSigned : 0}

@@ -21,6 +21,35 @@ export const GAIT_MODELS = [
   // FBX import (Mixamo character). Mixamo FBX exports are authored in
   // centimeters, unlike the meter-scale GLBs above, hence the 0.01 scale.
   { id: 'markerman', label: 'Marker Man', path: '/fbx/passive_marker_man.fbx', scale: 0.01 },
+  // Little RUNMO mascot - a custom (non-Mixamo) Sketchfab rig, so it needs an
+  // explicit bone-name map. Its bones spin on their own local axes, so the
+  // bend axes/signs below are tuned for this skeleton rather than the Mixamo
+  // defaults. Note the model's arm naming is inverted (its "Forarm" bone is
+  // the upper arm attached to the chest; its "Arm" bone is the forearm), and
+  // it's ~3 units tall with its pivot near the chest, hence scale + Y lift.
+  {
+    id: 'runmo', label: 'Little RUNMO', path: '/little_runmo.glb',
+    scale: 0.6, position: [0, 1.36, 0],
+    rig: {
+      // Names as three.js reports them after GLTFLoader strips the dots from
+      // the source names (Leg.L_18 -> LegL_18). Arm naming is inverted in the
+      // source rig: "Forarm" is the upper arm, "Arm" is the forearm.
+      bones: {
+        hips: ['Tas_19'],
+        spine: ['Breast_10'],
+        leftHip: ['LegL_18'],
+        rightHip: ['LegR_14'],
+        leftKnee: ['KneeL_17'],
+        rightKnee: ['KneeR_13'],
+        leftFoot: ['FeetBackL_16'],
+        rightFoot: ['FeetBackR_12'],
+        leftArm: ['ForarmL_9'],
+        rightArm: ['ForarmR_6'],
+        leftForeArm: ['ArmL_8'],
+        rightForeArm: ['ArmR_5'],
+      },
+    },
+  },
 ]
 
 export const DEFAULT_GAIT_MODEL = GAIT_MODELS[0].id

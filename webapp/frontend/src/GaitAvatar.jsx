@@ -55,6 +55,9 @@ const SWING_TOE_UP_DEG = 18
 const HEEL_ONLY_TOE_UP_DEG = 32
 const FOOT_EASE_PER_SEC = 10
 
+// Hip-tilt / spine-lean axis (lateral lean, Z). Overridable per model.
+const TILT_AXIS = new THREE.Vector3(0, 0, 1)
+
 // No arm sensors exist, so this is a static rest-pose correction, not a
 // measured reading: Mixamo characters load in a T-pose (arms straight out),
 // which reads as broken/robotic on a standing avatar. Rotating each arm bone
@@ -103,17 +106,34 @@ const RIGHT_ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
 // Shared rig-driving logic for any loaded skeleton, regardless of which
 // loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
 // bone graph, so this doesn't need to know which one loaded `root`).
-function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFlexRDeg, footPhaseL, footPhaseR }) {
+function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFlexRDeg, footPhaseL, footPhaseR }, rig) {
   const bones = useRef({})
   const restQuat = useRef({})
   const armDownQuat = useRef({})
   const footAngle = useRef({ left: 0, right: 0 })
 
+  // Per-model rig config. Defaults reproduce the Mixamo behaviour; a non-Mixamo
+  // skin (e.g. Little RUNMO) passes its own bone-name map and, when its bones
+  // spin on different local axes, axis/sign overrides - see gaitModels.js.
+  const BONES = rig?.bones || BONE
+  const cfg = useMemo(() => ({
+    kneeAxis: rig?.kneeAxis ? new THREE.Vector3(...rig.kneeAxis) : KNEE_AXIS,
+    kneeSign: rig?.kneeSign ?? KNEE_SIGN,
+    hipFlexAxis: rig?.hipFlexAxis ? new THREE.Vector3(...rig.hipFlexAxis) : HIP_FLEX_AXIS,
+    hipFlexSign: rig?.hipFlexSign ?? HIP_FLEX_SIGN,
+    tiltAxis: rig?.tiltAxis ? new THREE.Vector3(...rig.tiltAxis) : TILT_AXIS,
+    footAxis: rig?.footAxis ? new THREE.Vector3(...rig.footAxis) : FOOT_AXIS,
+    hipFlexMin: rig?.hipFlexMin ?? -30,
+    kneeMin: rig?.kneeMin ?? 0,
+    leftArmTarget: new THREE.Vector3(0, -1, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(rig?.armOutDeg ?? ARM_OUT_DEG)),
+    rightArmTarget: new THREE.Vector3(0, -1, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(-(rig?.armOutDeg ?? ARM_OUT_DEG))),
+  }), [rig])
+
   useEffect(() => {
     bones.current = {}
     root.traverse((obj) => {
       if (!obj.isBone) return
-      for (const [key, names] of Object.entries(BONE)) {
+      for (const [key, names] of Object.entries(BONES)) {
         if (names.includes(obj.name)) bones.current[key] = obj
       }
     })
@@ -145,21 +165,21 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       const localTarget = targetWorldDir.clone().applyQuaternion(parentWorldQuat.invert())
       return new THREE.Quaternion().setFromUnitVectors(restDir, localTarget)
     }
-    armDownQuat.current.left = armCorrection(b.leftArm, b.leftForeArm, LEFT_ARM_TARGET_DIR)
-    armDownQuat.current.right = armCorrection(b.rightArm, b.rightForeArm, RIGHT_ARM_TARGET_DIR)
-  }, [root])
+    armDownQuat.current.left = armCorrection(b.leftArm, b.leftForeArm, cfg.leftArmTarget)
+    armDownQuat.current.right = armCorrection(b.rightArm, b.rightForeArm, cfg.rightArmTarget)
+  }, [root, cfg, BONES])
 
   useFrame((_state, delta) => {
     const b = bones.current
     const rest = restQuat.current
     if (b.leftKnee && rest.leftKnee) {
-      const bend = THREE.MathUtils.degToRad(Math.max(0, kneeLDeg ?? 0)) * KNEE_SIGN
-      const q = new THREE.Quaternion().setFromAxisAngle(KNEE_AXIS, bend)
+      const bend = THREE.MathUtils.degToRad(Math.max(cfg.kneeMin, kneeLDeg ?? 0)) * cfg.kneeSign
+      const q = new THREE.Quaternion().setFromAxisAngle(cfg.kneeAxis, bend)
       b.leftKnee.quaternion.copy(rest.leftKnee).multiply(q)
     }
     if (b.rightKnee && rest.rightKnee) {
-      const bend = THREE.MathUtils.degToRad(Math.max(0, kneeRDeg ?? 0)) * KNEE_SIGN
-      const q = new THREE.Quaternion().setFromAxisAngle(KNEE_AXIS, bend)
+      const bend = THREE.MathUtils.degToRad(Math.max(cfg.kneeMin, kneeRDeg ?? 0)) * cfg.kneeSign
+      const q = new THREE.Quaternion().setFromAxisAngle(cfg.kneeAxis, bend)
       b.rightKnee.quaternion.copy(rest.rightKnee).multiply(q)
     }
     if (hipTiltDeg != null) {
@@ -173,7 +193,7 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       // Drive the full tilt into the Spine instead, so only the upper body
       // leans relative to the frozen pelvis.
       if (b.spine && rest.spine) {
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped))
+        const q = new THREE.Quaternion().setFromAxisAngle(cfg.tiltAxis, THREE.MathUtils.degToRad(clamped))
         b.spine.quaternion.copy(rest.spine).multiply(q)
       }
     }
@@ -182,13 +202,13 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     // extends backward (negative) during push-off; clamping at 0 flattened all
     // extension to a neutral standing line. -30 deg is a realistic extension limit.
     if (b.leftHip && rest.leftHip) {
-      const flex = THREE.MathUtils.degToRad(Math.max(-30, hipFlexLDeg ?? 0)) * HIP_FLEX_SIGN
-      const q = new THREE.Quaternion().setFromAxisAngle(HIP_FLEX_AXIS, flex)
+      const flex = THREE.MathUtils.degToRad(Math.max(cfg.hipFlexMin, hipFlexLDeg ?? 0)) * cfg.hipFlexSign
+      const q = new THREE.Quaternion().setFromAxisAngle(cfg.hipFlexAxis, flex)
       b.leftHip.quaternion.copy(rest.leftHip).multiply(q)
     }
     if (b.rightHip && rest.rightHip) {
-      const flex = THREE.MathUtils.degToRad(Math.max(-30, hipFlexRDeg ?? 0)) * HIP_FLEX_SIGN
-      const q = new THREE.Quaternion().setFromAxisAngle(HIP_FLEX_AXIS, flex)
+      const flex = THREE.MathUtils.degToRad(Math.max(cfg.hipFlexMin, hipFlexRDeg ?? 0)) * cfg.hipFlexSign
+      const q = new THREE.Quaternion().setFromAxisAngle(cfg.hipFlexAxis, flex)
       b.rightHip.quaternion.copy(rest.rightHip).multiply(q)
     }
 
@@ -201,11 +221,11 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     footAngle.current.left += (targetDeg(footPhaseL) - footAngle.current.left) * ease
     footAngle.current.right += (targetDeg(footPhaseR) - footAngle.current.right) * ease
     if (b.leftFoot && rest.leftFoot) {
-      const q = new THREE.Quaternion().setFromAxisAngle(FOOT_AXIS, THREE.MathUtils.degToRad(footAngle.current.left))
+      const q = new THREE.Quaternion().setFromAxisAngle(cfg.footAxis, THREE.MathUtils.degToRad(footAngle.current.left))
       b.leftFoot.quaternion.copy(rest.leftFoot).multiply(q)
     }
     if (b.rightFoot && rest.rightFoot) {
-      const q = new THREE.Quaternion().setFromAxisAngle(FOOT_AXIS, THREE.MathUtils.degToRad(footAngle.current.right))
+      const q = new THREE.Quaternion().setFromAxisAngle(cfg.footAxis, THREE.MathUtils.degToRad(footAngle.current.right))
       b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
     }
 
@@ -222,25 +242,25 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
   })
 }
 
-function GltfBody({ modelPath, scale, ...rig }) {
+function GltfBody({ modelPath, scale, position, rig, ...motion }) {
   const { scene } = useGLTF(modelPath)
   const clone = useMemo(() => cloneSkeleton(scene), [scene])
-  useAvatarRig(clone, rig)
-  return <primitive object={clone} scale={scale ?? 1} />
+  useAvatarRig(clone, motion, rig)
+  return <primitive object={clone} scale={scale ?? 1} position={position} />
 }
 
-function FbxBody({ modelPath, scale, ...rig }) {
+function FbxBody({ modelPath, scale, position, rig, ...motion }) {
   const fbx = useLoader(FBXLoader, modelPath)
   const clone = useMemo(() => cloneSkeleton(fbx), [fbx])
-  useAvatarRig(clone, rig)
-  return <primitive object={clone} scale={scale ?? 1} />
+  useAvatarRig(clone, motion, rig)
+  return <primitive object={clone} scale={scale ?? 1} position={position} />
 }
 
-export default function GaitAvatar({ modelPath, scale, ...rig }) {
+export default function GaitAvatar({ modelPath, scale, position, rig, ...motion }) {
   const isFbx = modelPath.toLowerCase().endsWith('.fbx')
   return isFbx
-    ? <FbxBody modelPath={modelPath} scale={scale} {...rig} />
-    : <GltfBody modelPath={modelPath} scale={scale} {...rig} />
+    ? <FbxBody modelPath={modelPath} scale={scale} position={position} rig={rig} {...motion} />
+    : <GltfBody modelPath={modelPath} scale={scale} position={position} rig={rig} {...motion} />
 }
 
 // Only the default skin is preloaded eagerly; the others (several MB each,
