@@ -65,12 +65,27 @@ function buildSteps(m) {
       key: 'hipFlex', label: 'Hip flexion',
       prompts: [
         'Stand straight and hold still, then click Next.',
-        'Now lift one knee up and forward, like marching in place, until your thigh is about ' +
-        '30-60° off vertical. Hold still, then click Next.',
+        'Now lift ONE knee up and forward, like marching in place, until your thigh is about ' +
+        '30-60° off vertical - lifting just one leg is enough, you don\'t need to move both. ' +
+        'Hold still, then click Next.',
       ],
       poses: ['stand', 'hipFlex'],
       run: (actions) => actions.calibrateHips(),
-      result: (m) => m?.calMsgHip,
+      // calibrateHips() tries both legs at once and reports each - since the
+      // prompt above only asks for ONE leg, the untouched side always comes
+      // back "movement too small". That's expected, not a failure, so it's
+      // reworded here rather than showing what reads like an error for a
+      // leg the patient was never asked to move.
+      result: (m) => {
+        const raw = m?.calMsgHip
+        if (!raw) return raw
+        const parts = raw.split(', ')
+        const calibrated = parts.filter((p) => p.includes('calibrated'))
+        if (calibrated.length > 0 && calibrated.length < parts.length) {
+          return `${calibrated.join(', ')} (the other leg wasn't moved - that's fine, one is enough).`
+        }
+        return raw
+      },
     })
   }
   if (hipOk) {
