@@ -137,7 +137,7 @@ export default function App() {
         </div>
       </header>
 
-      <DevicesPanel snap={snap} />
+      {session.role !== 'clinician' && <DevicesPanel snap={snap} />}
 
       {!anyLive ? (
         <div className="empty">
