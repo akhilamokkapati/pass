@@ -66,7 +66,7 @@ function renderMarkdown(text) {
   return out
 }
 
-export default function AiSummaryCard() {
+export default function AiSummaryCard({ onSummary }) {
   const [state, setState] = useState('idle')   // idle | loading | done | error
   const [text, setText] = useState('')
 
@@ -76,8 +76,11 @@ export default function AiSummaryCard() {
       .then((res) => res.json())
       .then((data) => {
         if (data.error) { setText(data.error); setState('error'); return }
-        setText(data.summary || 'No summary returned.')
+        const summary = data.summary || 'No summary returned.'
+        setText(summary)
         setState('done')
+        // Hand the generated summary up so the PDF report can include it.
+        onSummary?.(summary)
       })
       .catch(() => { setText("Couldn't reach the server - try again."); setState('error') })
   }

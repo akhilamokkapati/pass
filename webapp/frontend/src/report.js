@@ -14,6 +14,32 @@ function lighten([r, g, b], t) {
   return [Math.round(r + (255 - r) * t), Math.round(g + (255 - g) * t), Math.round(b + (255 - b) * t)]
 }
 
+// Split a markdown line into plain / bold runs on **...**.
+function parseRuns(line) {
+  return line.split(/(\*\*[^*]+\*\*)/g).filter((p) => p !== '').map((p) =>
+    p.startsWith('**') && p.endsWith('**') ? { text: p.slice(2, -2), bold: true } : { text: p, bold: false })
+}
+
+// Draw wrapped rich text (mixed bold/normal runs) starting at baseline y.
+// Returns the baseline y of the last line drawn.
+function drawRich(doc, x, y, maxW, runs, size, lineH, color, forceBold) {
+  doc.setFontSize(size)
+  doc.setTextColor(color[0], color[1], color[2])
+  let cx = x
+  runs.forEach((run) => {
+    doc.setFont('helvetica', (run.bold || forceBold) ? 'bold' : 'normal')
+    run.text.split(/(\s+)/).forEach((w) => {
+      if (w === '') return
+      const ww = doc.getTextWidth(w)
+      if (w.trim() === '') { cx += ww; return }        // whitespace token
+      if (cx + ww > x + maxW && cx > x) { y += lineH; cx = x }
+      doc.text(w, cx, y)
+      cx += ww
+    })
+  })
+  return y
+}
+
 // Card background panel.
 function drawCardBg(doc, x, y, w, h) {
   doc.setFillColor(248, 250, 252)
@@ -119,13 +145,15 @@ function drawChart(doc, x, y, w, h, vals, hex) {
 
 // Draws the whole report and returns the jsPDF doc (kept separate from the
 // download so it can be rendered/inspected without a browser save dialog).
-export function buildReportDoc(m) {
+export function buildReportDoc(m, summary) {
   const hist = m?.hist || []
   const now = new Date()
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const PAGE_W = 595
+  const PAGE_H = 842
   const M = 40
   const W = PAGE_W - 2 * M
+  const BOTTOM = PAGE_H - 40
 
   // Top accent stripe + header.
   doc.setFillColor(43, 111, 214)
@@ -142,6 +170,76 @@ export function buildReportDoc(m) {
   doc.setDrawColor(230, 235, 241)
   doc.setLineWidth(1)
   doc.line(M, 92, PAGE_W - M, 92)
+
+  let y = 108
+  // Start a fresh page when the next block wouldn't fit.
+  const ensureSpace = (need) => {
+    if (y + need > BOTTOM) { doc.addPage(); y = 54 }
+  }
+
+  // AI progress summary (only if the clinician generated one on screen).
+  if (summary && summary.trim()) {
+    doc.setFillColor(43, 111, 214)
+    doc.circle(M + 3, y - 3, 3, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.setTextColor(24, 28, 36)
+    doc.text('AI progress summary', M + 13, y)
+    y += 16
+
+    const lines = summary.replace(/\r/g, '').split('\n')
+    for (const raw of lines) {
+      const line = raw.replace(/\s+$/, '')
+      if (line.trim() === '') { y += 5; continue }
+
+      if (/^-{3,}$/.test(line.trim())) {                       // --- divider
+        ensureSpace(16)
+        doc.setDrawColor(230, 235, 241)
+        doc.setLineWidth(1)
+        doc.line(M, y, PAGE_W - M, y)
+        y += 12
+        continue
+      }
+      const h = line.match(/^#{1,6}\s+(.*)$/)                  // ### heading
+      if (h) {
+        ensureSpace(26)
+        y += 8
+        y = drawRich(doc, M, y, W, parseRuns(h[1]), 11, 15, [30, 36, 46], true) + 6
+        continue
+      }
+      const n = line.match(/^(\d+)\.\s+(.*)$/)                 // 1. list item
+      if (n) {
+        ensureSpace(20)
+        y += 4
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.setTextColor(30, 36, 46)
+        doc.text(n[1] + '.', M, y)
+        y = drawRich(doc, M + 18, y, W - 18, parseRuns(n[2]), 10, 14, [55, 62, 74]) + 13
+        continue
+      }
+      const b = line.match(/^\s*[*-]\s+(.*)$/)                 // * / - bullet
+      if (b) {
+        ensureSpace(18)
+        y += 2
+        doc.setFillColor(120, 127, 138)
+        doc.circle(M + 6, y - 3, 1.3, 'F')
+        y = drawRich(doc, M + 16, y, W - 16, parseRuns(b[1]), 10, 14, [70, 77, 88]) + 13
+        continue
+      }
+      ensureSpace(18)                                          // paragraph
+      y += 2
+      y = drawRich(doc, M, y, W, parseRuns(line), 10, 14, [55, 62, 74]) + 13
+    }
+
+    // Divider before the metric cards.
+    y += 6
+    ensureSpace(30)
+    doc.setDrawColor(230, 235, 241)
+    doc.setLineWidth(1)
+    doc.line(M, y, PAGE_W - M, y)
+    y += 22
+  }
 
   const kneeData = (key, angleKey, reps) => {
     const kv = hist.map((h) => h[key]).filter((x) => x != null)
@@ -163,10 +261,10 @@ export function buildReportDoc(m) {
   const kneeL = kneeData('kneeL', 'kneeLAngle', m?.repsL)
   const kneeR = kneeData('kneeR', 'kneeRAngle', m?.repsR)
 
-  let y = 108
   const card = (title, hex, tiles, vals) => {
     const hasChart = vals !== null && vals !== undefined
     const cardH = hasChart ? 162 : 94
+    ensureSpace(cardH + 16)
     drawCardBg(doc, M, y, W, cardH)
     drawCardHeading(doc, M + 14, y + 24, title, hex)
     const tilesTop = y + 36
@@ -187,6 +285,7 @@ export function buildReportDoc(m) {
   ], null)
 
   // Footer rule + disclaimer.
+  ensureSpace(50)
   doc.setDrawColor(230, 235, 241)
   doc.setLineWidth(1)
   doc.line(M, y, PAGE_W - M, y)
@@ -202,7 +301,7 @@ export function buildReportDoc(m) {
 }
 
 // One-click download, no dialog.
-export function downloadReport(m) {
-  const doc = buildReportDoc(m)
+export function downloadReport(m, summary) {
+  const doc = buildReportDoc(m, summary)
   doc.save(`PASS-report-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
