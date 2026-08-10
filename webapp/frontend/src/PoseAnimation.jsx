@@ -16,7 +16,8 @@ const POSE_LABEL = {
   stand: 'Stand straight',
   kneeL: 'Bend LEFT knee',
   kneeR: 'Bend RIGHT knee',
-  hipFlex: 'Lift knee up and forward',
+  hipFlexL: 'Lift LEFT knee up and forward',
+  hipFlexR: 'Lift RIGHT knee up and forward',
   hipTilt: 'Lean RIGHT',
 }
 
@@ -37,7 +38,7 @@ export default function PoseAnimation({ pose }) {
         {/* right leg (viewer's right = figure's left leg, kept static except hip-tilt plant) */}
         <line x1="80" y1="104" x2="94" y2="150" className="pose-part pose-static" />
         <line x1="94" y1="150" x2="96" y2="182" className="pose-part pose-static" />
-        {/* left leg (the one that moves for kneeL / hipFlex) */}
+        {/* left leg (the one that moves for kneeL / hipFlexL) */}
         <g className="pose-leg-hip">
           <line x1="80" y1="104" x2="66" y2="150" className="pose-part pose-thigh" />
           <g className="pose-leg-knee">

@@ -205,9 +205,9 @@ body {
 
 /* hip flexion: thigh + shin lift together at the hip, knee following with a
    natural slight bend (a marching motion, not a straight-leg raise) */
-.pose-hipFlex .pose-leg-hip { animation: pose-hip-lift 2.4s ease-in-out infinite; }
-.pose-hipFlex .pose-leg-hip .pose-leg-knee { animation: pose-knee-follow 2.4s ease-in-out infinite; }
-.pose-hipFlex .pose-thigh, .pose-hipFlex .pose-shin { stroke: var(--accent); }
+.pose-hipFlexL .pose-leg-hip, .pose-hipFlexR .pose-leg-hip { animation: pose-hip-lift 2.4s ease-in-out infinite; }
+.pose-hipFlexL .pose-leg-hip .pose-leg-knee, .pose-hipFlexR .pose-leg-hip .pose-leg-knee { animation: pose-knee-follow 2.4s ease-in-out infinite; }
+.pose-hipFlexL .pose-thigh, .pose-hipFlexL .pose-shin, .pose-hipFlexR .pose-thigh, .pose-hipFlexR .pose-shin { stroke: var(--accent); }
 @keyframes pose-hip-lift {
   0%, 100% { transform: rotate(0deg); }
   55% { transform: rotate(-55deg); }
@@ -216,6 +216,9 @@ body {
   0%, 100% { transform: rotate(0deg); }
   55% { transform: rotate(35deg); }
 }
+/* hipFlexR mirrors the whole figure, same trick as kneeR above, so the
+   animated leg (always drawn on the figure's left) reads as the RIGHT leg */
+.pose-fig.pose-hipFlexR { transform-box: view-box; transform-origin: 80px 95px; transform: scaleX(-1); }
 
 /* hip tilt: torso + arms lean right as one unit, legs stay planted */
 .pose-hipTilt .pose-upper { animation: pose-lean 2.2s ease-in-out infinite; }

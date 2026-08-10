@@ -20,6 +20,17 @@
 import { useState } from 'react'
 import PoseAnimation from './PoseAnimation.jsx'
 
+// calibrateHips() reports both sides in one comma-joined message
+// ("left: calibrated, right: movement too small") even though each wizard
+// step only asks for one leg - pick out just that step's side.
+function hipFlexSideResult(m, side) {
+  const raw = m?.calMsgHip
+  if (!raw) return raw
+  const mine = raw.split(', ').find((p) => p.startsWith(`${side}:`))
+  if (!mine) return raw
+  return mine.includes('calibrated') ? 'Calibrated.' : 'Movement too small - hold the pose still and try again.'
+}
+
 function buildSteps(m) {
   const kneeLOk = !!m?.kneeLOk
   const kneeROk = !!m?.kneeROk
@@ -60,32 +71,38 @@ function buildSteps(m) {
       result: (m) => m?.calMsgR,
     })
   }
-  if (hipOk && (kneeLOk || kneeROk)) {
+  // Hip flexion is one leg at a time, same as the knees above - split into
+  // its own step per side rather than one "lift either leg" step, so
+  // Calibrate All always ends with BOTH hipFlexL and hipFlexR calibrated
+  // instead of leaving whichever leg the patient didn't move uncalibrated.
+  // calibrateHips() itself already handles either/both sides per call and
+  // only overwrites a side's calibration when that side actually moved
+  // enough (see useMetrics.js), so running it once per leg here just
+  // accumulates both without clobbering the one already captured.
+  if (hipOk && kneeLOk) {
     steps.push({
-      key: 'hipFlex', label: 'Hip flexion',
+      key: 'hipFlexL', label: 'Left hip flexion',
       prompts: [
         'Stand straight and hold still, then click Next.',
-        'Now lift ONE knee up and forward, like marching in place, until your thigh is about ' +
-        '30-60° off vertical - lifting just one leg is enough, you don\'t need to move both. ' +
-        'Hold still, then click Next.',
+        'Now lift your LEFT knee up and forward, like marching in place, until your thigh is about ' +
+        '30-60° off vertical. Hold still, then click Next.',
       ],
-      poses: ['stand', 'hipFlex'],
+      poses: ['stand', 'hipFlexL'],
       run: (actions) => actions.calibrateHips(),
-      // calibrateHips() tries both legs at once and reports each - since the
-      // prompt above only asks for ONE leg, the untouched side always comes
-      // back "movement too small". That's expected, not a failure, so it's
-      // reworded here rather than showing what reads like an error for a
-      // leg the patient was never asked to move.
-      result: (m) => {
-        const raw = m?.calMsgHip
-        if (!raw) return raw
-        const parts = raw.split(', ')
-        const calibrated = parts.filter((p) => p.includes('calibrated'))
-        if (calibrated.length > 0 && calibrated.length < parts.length) {
-          return `${calibrated.join(', ')} (the other leg wasn't moved - that's fine, one is enough).`
-        }
-        return raw
-      },
+      result: (m) => hipFlexSideResult(m, 'left'),
+    })
+  }
+  if (hipOk && kneeROk) {
+    steps.push({
+      key: 'hipFlexR', label: 'Right hip flexion',
+      prompts: [
+        'Stand straight and hold still, then click Next.',
+        'Now lift your RIGHT knee up and forward, like marching in place, until your thigh is about ' +
+        '30-60° off vertical. Hold still, then click Next.',
+      ],
+      poses: ['stand', 'hipFlexR'],
+      run: (actions) => actions.calibrateHips(),
+      result: (m) => hipFlexSideResult(m, 'right'),
     })
   }
   if (hipOk) {
