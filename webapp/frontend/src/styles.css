@@ -174,6 +174,57 @@ body {
 .cal-all-actions { display: flex; gap: 10px; justify-content: center; margin-top: 26px; }
 .cal-all-actions .btn { margin-top: 0; padding: 12px 22px; font-size: 15px; }
 
+/* ---- calibrate-all pose animation (PoseAnimation.jsx) ---- */
+.pose-anim { width: 116px; height: 138px; margin: 0 auto 4px; display: block; }
+.pose-part { stroke: var(--text); stroke-width: 6; stroke-linecap: round; fill: none; }
+.pose-fig circle.pose-part { fill: var(--text); stroke: none; }
+.pose-upper, .pose-leg-hip, .pose-leg-knee { transform-box: view-box; transform-origin: 80px 104px; }
+.pose-leg-knee { transform-origin: 66px 150px; }
+
+/* stand: gentle idle "hold still" breathing pulse on the whole figure */
+.pose-stand.pose-fig { transform-box: view-box; transform-origin: 80px 100px; animation: pose-breathe 2.4s ease-in-out infinite; }
+@keyframes pose-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+/* knee bend: shin swings back, thigh stays put - matches calibrateKneeSide's
+   thigh/shank relative rotation, not a generic whole-leg bend */
+.pose-kneeL .pose-leg-knee, .pose-kneeR .pose-leg-knee {
+  animation: pose-knee-bend 2.2s ease-in-out infinite;
+}
+.pose-kneeL .pose-shin, .pose-kneeR .pose-shin { stroke: var(--accent); }
+@keyframes pose-knee-bend {
+  0%, 100% { transform: rotate(0deg); }
+  55% { transform: rotate(55deg); }
+}
+/* kneeR mirrors the whole figure so the animated leg (always drawn on the
+   figure's left) reads as the RIGHT leg instead of duplicating every pose
+   as a separate left/right SVG */
+.pose-fig.pose-kneeR { transform-box: view-box; transform-origin: 80px 95px; transform: scaleX(-1); }
+
+/* hip flexion: thigh + shin lift together at the hip, knee following with a
+   natural slight bend (a marching motion, not a straight-leg raise) */
+.pose-hipFlex .pose-leg-hip { animation: pose-hip-lift 2.4s ease-in-out infinite; }
+.pose-hipFlex .pose-leg-hip .pose-leg-knee { animation: pose-knee-follow 2.4s ease-in-out infinite; }
+.pose-hipFlex .pose-thigh, .pose-hipFlex .pose-shin { stroke: var(--accent); }
+@keyframes pose-hip-lift {
+  0%, 100% { transform: rotate(0deg); }
+  55% { transform: rotate(-55deg); }
+}
+@keyframes pose-knee-follow {
+  0%, 100% { transform: rotate(0deg); }
+  55% { transform: rotate(35deg); }
+}
+
+/* hip tilt: torso + arms lean right as one unit, legs stay planted */
+.pose-hipTilt .pose-upper { animation: pose-lean 2.2s ease-in-out infinite; }
+.pose-hipTilt .pose-upper .pose-part { stroke: var(--accent); }
+@keyframes pose-lean {
+  0%, 100% { transform: rotate(0deg); }
+  55% { transform: rotate(18deg); }
+}
+
 /* ---- cards ---- */
 .card {
   background: linear-gradient(180deg, var(--panel), var(--panel-2));

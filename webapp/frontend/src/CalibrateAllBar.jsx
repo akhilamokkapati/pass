@@ -18,6 +18,7 @@
 // reordering steps under the patient's feet.
 
 import { useState } from 'react'
+import PoseAnimation from './PoseAnimation.jsx'
 
 function buildSteps(m) {
   const kneeLOk = !!m?.kneeLOk
@@ -30,6 +31,7 @@ function buildSteps(m) {
     steps.push({
       key: 'balance', label: 'Weight balance',
       prompts: ['Stand evenly on both feet with real weight on the insoles, then click Next.'],
+      poses: ['stand'],
       run: (actions) => actions.calibrateBalance(),
       result: (m) => m?.calMsgBalance,
     })
@@ -41,6 +43,7 @@ function buildSteps(m) {
         'Stand with your LEFT knee straight and hold still, then click Next.',
         'Now bend your LEFT knee about 30-60° and hold still, then click Next.',
       ],
+      poses: ['stand', 'kneeL'],
       run: (actions) => actions.calibrateKneeL(),
       result: (m) => m?.calMsgL,
     })
@@ -52,6 +55,7 @@ function buildSteps(m) {
         'Stand with your RIGHT knee straight and hold still, then click Next.',
         'Now bend your RIGHT knee about 30-60° and hold still, then click Next.',
       ],
+      poses: ['stand', 'kneeR'],
       run: (actions) => actions.calibrateKneeR(),
       result: (m) => m?.calMsgR,
     })
@@ -64,6 +68,7 @@ function buildSteps(m) {
         'Now lift one knee up and forward, like marching in place, until your thigh is about ' +
         '30-60° off vertical. Hold still, then click Next.',
       ],
+      poses: ['stand', 'hipFlex'],
       run: (actions) => actions.calibrateHips(),
       result: (m) => m?.calMsgHip,
     })
@@ -75,6 +80,7 @@ function buildSteps(m) {
         'Stand straight and level, hold still, then click Next.',
         'Now lean to your RIGHT and hold still, then click Next.',
       ],
+      poses: ['stand', 'hipTilt'],
       run: (actions) => actions.calibrateHipTilt(),
       result: (m) => m?.calMsgHipTilt,
     })
@@ -143,6 +149,7 @@ export default function CalibrateAllBar({ m, actions }) {
           <>
             <div className="cal-all-progress">Step {stepIdx + 1} of {steps.length}</div>
             <div className="cal-all-title">{step.label}</div>
+            {capturing && <PoseAnimation pose={step.poses[clickCount]} />}
             <div className="cal-all-prompt">{capturing ? step.prompts[clickCount] : (step.result(m) || 'Captured.')}</div>
             <div className="cal-all-actions">
               {!capturing && <button className="btn ghost" onClick={retry}>Retry</button>}
