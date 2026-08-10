@@ -161,11 +161,11 @@ export function buildReportDoc(m, summary) {
   doc.setTextColor(24, 28, 36)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(20)
-  doc.text('PASS session report', M, 62)
+  doc.text('RUNMO session report', M, 62)
   doc.setTextColor(140, 146, 156)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  doc.text('Patient Assessment Sensing System', M, 78)
+  doc.text('Helping you run-more', M, 78)
   doc.text('Generated ' + now.toLocaleString(), PAGE_W - M, 62, { align: 'right' })
   doc.setDrawColor(230, 235, 241)
   doc.setLineWidth(1)
@@ -300,7 +300,7 @@ export function buildReportDoc(m, summary) {
   doc.setTextColor(150, 156, 166)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
-  const disc = 'PASS, Patient Assessment Sensing System. Knee and pelvis angles from IMU ' +
+  const disc = 'Project RUNMO. Knee and pelvis angles from IMU ' +
     'quaternions (swing twist); foot loads from insole pressure in relative units. ' +
     'Validate against a goniometer and weighing scale before clinical use.'
   doc.text(doc.splitTextToSize(disc, W), M, y + 16)
@@ -311,5 +311,5 @@ export function buildReportDoc(m, summary) {
 // One-click download, no dialog.
 export function downloadReport(m, summary) {
   const doc = buildReportDoc(m, summary)
-  doc.save(`PASS-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+  doc.save(`RUNMO-report-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
