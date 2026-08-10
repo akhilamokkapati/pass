@@ -1,18 +1,25 @@
 /*
  * angle_pid_wifi_test.cpp
- * angle_pid_test_manual.cpp's motor/PID/serial logic, unmodified, with the
- * WiFi networking layer from wifi_bringup.cpp added on top. Goal: validate
- * the webapp <-> board round trip against a real reading (encoder position),
- * not yet drive the motors from webapp commands.
+ * angle_pid_test_manual.cpp's motor/PID/serial/strain-gauge logic,
+ * unmodified, with the WiFi networking layer from wifi_bringup.cpp added on
+ * top. Goal: validate the webapp <-> board round trip, not yet drive the
+ * motors from webapp commands.
  *
- * Telemetry out (UDP :5007): sends active->position in tension_n's slot -
- * a stand-in for a real force reading, since this file has no strain gauge.
+ * Resynced 2026-08-10 against angle_pid_test_manual.cpp's HX711 update -
+ * strain gauges, per-motor force reading, fixed-interval PID, and the
+ * encoder-B ISR pin fix all carried over verbatim from there.
+ *
+ * Telemetry out (UDP :5007): sends active->force (real strain gauge
+ * reading) in tension_n's slot, switched over from the earlier
+ * active->position placeholder now that a real strain gauge exists.
  * Commands in (UDP :5008): received and logged only, same as
  * wifi_bringup.cpp - NOT mapped onto the motor/setpoint state machine yet.
- * Serial control (motor select, setpoint, z/s/m) is completely untouched.
+ * Serial control (motor select, setpoint, z/s/m/read-force) is completely
+ * untouched.
  */
 
 #include <Arduino.h>
+#include <HX711.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_task_wdt.h>
@@ -30,6 +37,13 @@ const int BIN2 = D4;
 const int ENC_C3 = D2;
 const int ENC_C4 = D7;
 
+const int HX711_DT_A = D0;
+const int HX711_DT_B = D9;
+const int HX711_SCK = D1;
+
+HX711 scaleA;
+HX711 scaleB;
+
 float Kp = 1, Ki = 0, Kd = 0;
 
 // Motor States
@@ -46,10 +60,16 @@ struct Motor {
   float prevError;
   float errorIntegral;
   float controlSignal;
+
+  HX711* scale;
+
+  float force;
+
+  int sign;
 };
 
-Motor motorA = {'A', 1, 2, ENC_C2, 0, 0, 0, 0, 0};
-Motor motorB = {'B', 3, 4, ENC_C4, 0, 0, 0, 0, 0};
+Motor motorA = {'A', 1, 2, ENC_C2, 0, 0, 0, 0, 0, &scaleA, 0, 1};
+Motor motorB = {'B', 3, 4, ENC_C4, 0, 0, 0, 0, 0, &scaleB, 0, -1};
 
 
 void IRAM_ATTR onEncoderRiseA() {
@@ -58,7 +78,7 @@ void IRAM_ATTR onEncoderRiseA() {
 }
 
 void IRAM_ATTR onEncoderRiseB() {
-  if (digitalRead(ENC_C4) == HIGH) motorB.position++;
+  if (digitalRead(ENC_C3) == HIGH) motorB.position++;
     else motorB.position--;
 }
 
@@ -84,18 +104,20 @@ void brakeAll() {
 // PID stuff
 
 unsigned long lastControlMicros = 0;
+const unsigned long CONTROL_INTERVAL_US = 5000;
 
 void resetPID(Motor& m) {
   m.prevError = m.setpoint - m.position;
   m.errorIntegral = 0;
   m.controlSignal = 0;
+  lastControlMicros = micros();
 }
 
 void calculatePID(Motor& m, float dt)
 {
   float measured = (float)m.position;
 
-  float error = measured - m.setpoint;
+  float error = (m.setpoint - measured);
 
   float edot = (error - m.prevError) / dt;
 
@@ -153,8 +175,6 @@ void handleSerialInput() {
   if (!readLine(line)) return;
   if (line.length() == 0) return;
 
-  Serial.print("H");
-
   char c = tolower(line.charAt(0));
 
   // Shortcut to stop motors at any point - s key
@@ -174,6 +194,16 @@ void handleSerialInput() {
       else { Serial.println(F("Invalid Motor Selection, select 'a' or 'b'")); return; }
       state = AWAIT_SETPOINT;
       promptSetpoint();
+
+      if (active) {
+        if (active->scale->is_ready()) {
+          Serial.println("Strain Gauge Ready");
+        }
+        else {
+          Serial.println("Strain Gauge not ready");
+        }
+      }
+
       break;
 
     case AWAIT_SETPOINT:
@@ -201,16 +231,24 @@ void handleSerialInput() {
       }
       break;
 
-  case RUNNING:
-    if (c == 'm') {
-        setMotor(*active, 0);
-        active = nullptr;
-        state = SELECT_MOTOR;
-        promptSelectMotor();
+    case RUNNING:
+      if (c == 'm') {
+          setMotor(*active, 0);
+          active = nullptr;
+          state = SELECT_MOTOR;
+          promptSelectMotor();
       } else if (c == '-' || c == '.' || isdigit(c)) {
         active->setpoint = line.toFloat();   // retarget on the fly
         Serial.print(F("# new setpoint: "));
         Serial.println(active->setpoint);
+      } else if (line == "read-force") {
+        setMotor(*active, 0);
+        float averaged_force = active->scale->get_units(30);
+        Serial.print("Averaged 30 force values: ");
+        Serial.print(averaged_force);
+        Serial.println();
+        state = AWAIT_SETPOINT;
+        promptSetpoint();
       }
       break;
   }
@@ -230,8 +268,14 @@ void printStatusIfDue() {
   Serial.print(F(",measured:"));   Serial.print(active->position);
   Serial.print(F(",error:"));      Serial.print(active->setpoint - active->position);
   Serial.print(F(",control:"));    Serial.print(active->controlSignal);
+  Serial.print(F(",Force/N:"));    Serial.print(active->force);
   Serial.println();
 
+}
+
+void updateForce (Motor& m) {
+  if(!m.scale->is_ready()) return;
+  m.force = m.scale->get_units(1);
 }
 
 // ---- WiFi bring-up (added - see wifi_bringup.cpp for the source of this
@@ -318,17 +362,19 @@ void handleWifiCommands() {
   }
 }
 
-// telemetry out - active->position stands in for tension_n (no strain gauge
-// in this file); state string reflects the serial state machine above
+// telemetry out - active->force (real strain gauge reading) now feeds
+// tension_n. Only updates while state == RUNNING (see updateForce()'s call
+// site in loop() - untouched, part of the resynced actuation code), so
+// select a motor and enter a setpoint over Serial to see it move.
 void sendTelemetryIfDue() {
   uint32_t now = millis();
   if (now - lastEmit < EMIT_MS) return;
   lastEmit = now;
 
-  float position = active ? (float)active->position : 0.0f;
+  float force = active ? active->force : 0.0f;
   char line[80];
   snprintf(line, sizeof(line), UNIT_ID ",%lu,%lu,%.2f,%s",
-           (unsigned long)seq, (unsigned long)now, position, stateName());
+           (unsigned long)seq, (unsigned long)now, force, stateName());
   int beginOk = txUdp.beginPacket(dest, TELEMETRY_PORT);
   if (beginOk) udpBeginOk++; else udpBeginFail++;
   txUdp.write((const uint8_t *)line, strlen(line));
@@ -354,9 +400,6 @@ void printWifiHealthIfDue() {
 
 void setup()
 {
-  Serial.begin(115200);
-  delay(2000);
-
   ledcSetup(1, FREQ, RES);
   ledcAttachPin(AIN1, 1);
   ledcSetup(2, FREQ, RES);
@@ -367,16 +410,33 @@ void setup()
   ledcSetup(4, FREQ, RES);
   ledcAttachPin(BIN2, 4);
 
+  brakeAll();
+
+  Serial.begin(115200);
+
+  delay(2000);
+
   pinMode(ENC_C1, INPUT_PULLUP);
   pinMode(ENC_C2, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_C1), onEncoderRiseA, RISING);
 
-  pinMode(ENC_C3, INPUT);
-  pinMode(ENC_C4, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENC_C3), onEncoderRiseB, RISING);
+  pinMode(ENC_C3, INPUT_PULLUP);
+  pinMode(ENC_C4, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENC_C4), onEncoderRiseB, RISING);
 
-  brakeAll();
+  // strain gauge setup:
+  scaleA.begin(HX711_DT_A, HX711_SCK);
+  scaleB.begin(HX711_DT_B, HX711_SCK);
 
+  // experimentally deterimined scale factor A: -15147
+
+  scaleA.set_scale(15147.f);
+  scaleB.set_scale(18766.f);
+
+  scaleA.tare();
+  scaleB.tare();
+
+  // ---- WiFi bring-up added on top of the actuation setup above ----------
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, !LED_ON);
 
@@ -407,7 +467,6 @@ void loop()
 {
   esp_task_wdt_reset();   // feed the watchdog every pass - see wdtBegin()
   checkZombieWifi();
-
   if (WiFi.status() == WL_CONNECTED) digitalWrite(LED_PIN, LED_ON);
   else digitalWrite(LED_PIN, ((millis() / 300) % 2) ? LED_ON : !LED_ON);
 
@@ -415,8 +474,12 @@ void loop()
 
   if (state == RUNNING && active != nullptr) {
     unsigned long now = micros();
-    unsigned long elapsed = now - lastControlMicros;   // unsigned -> rollover-safe
-    calculatePID(*active, elapsed / 1000000.0f);
+    if (now - lastControlMicros >= CONTROL_INTERVAL_US) {
+      float dt = (now - lastControlMicros) / 1000000.0f;
+      lastControlMicros = now;
+      calculatePID(*active, dt);
+      updateForce(*active);
+    }
   }
 
   printStatusIfDue();

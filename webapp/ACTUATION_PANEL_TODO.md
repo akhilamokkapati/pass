@@ -55,6 +55,19 @@ webapp-only.
       (same visual treatment as the Manual Control stop button below) - added
       a shared `.stop-circle` style in `styles.css`, used by both this and
       Manual Control's Force Stop.
+- [x] Session Data card (top card) should only show live tension while a
+      session is actually running, not always - now gated on `hasTarget`
+      (same condition already used for the Target/Actual line): shows "--"
+      and a "No active session" cue otherwise.
+- [ ] **Firmware note for later:** every time a session starts, the encoder
+      reading should zero first - it never resets today. Not implementable
+      yet since webapp -> firmware command mapping is still deferred (see
+      `angle_pid_wifi_test.cpp` - commands are received and logged, not
+      acted on). When that mapping gets built, session-start's `set_force`/
+      `twist` handling needs to zero the encoder (existing `z` serial command
+      already does this manually - same logic, just triggered by the
+      incoming command instead of a keypress) before twisting toward the
+      target.
 
 ## Recommendation
 

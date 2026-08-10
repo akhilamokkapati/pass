@@ -64,16 +64,19 @@ export default function ActuationPanel({ session, act }) {
     respondRecommendation, jogStart, jogStop,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   } = act
+  const selectedExercise = EXERCISES.find((ex) => ex.id === exercise)
 
   return (
     <div className="grid actuation">
       <div className={`card center accent-actuation ${online ? '' : 'off'}`}>
         <div className="card-head"><h3>Session Data</h3><StatusPill ok={online} /></div>
-        <div className="act-tension">{online ? tension.toFixed(1) : '--'}<span> kg</span></div>
-        {hasTarget && (
+        <div className="act-tension">{online && hasTarget ? tension.toFixed(1) : '--'}<span> kg</span></div>
+        {hasTarget ? (
           <div className={`act-consistency ${Math.abs(deltaPct) <= 5 ? 'good' : ''}`}>
             Target {target} kg · Actual {tension.toFixed(1)} kg · Δ {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%
           </div>
+        ) : (
+          <div className="cue">No active session</div>
         )}
         <div className="cue">Force Monitoring</div>
         <TimeChart data={comparisonData}
@@ -181,13 +184,19 @@ export default function ActuationPanel({ session, act }) {
 
       {rec && (
         <div className="card center accent-actuation act-recommendation">
-          <div className="card-head"><h3>Next-weight recommendation</h3></div>
-          <div className="cue">{EXERCISES.find((ex) => ex.id === exercise)?.label}</div>
-          <div className="act-tension small">{rec.kg} kg</div>
-          <div className="cue">{rec.reason}</div>
-          <div className="cue">
-            PT recommended: {EXERCISES.find((ex) => ex.id === exercise)?.ptReps} reps
+          <div className="card-head"><h3>System Recommendation</h3></div>
+          <div className="cue">For your next session:</div>
+          <div className="act-rec-row">
+            <div className="act-rec-col">
+              <div className="cue">{selectedExercise?.label}</div>
+              <div className="act-tension small">{rec.kg} kg</div>
+            </div>
+            <div className="act-rec-col">
+              <div className="cue">Reps</div>
+              <div className="act-tension small">{selectedExercise?.ptReps}</div>
+            </div>
           </div>
+          <div className="cue">{rec.reason}</div>
           {isClinician && rec.status === 'pending' && (
             <div className="act-summary-actions">
               <button className="btn download" onClick={() => respondRecommendation(true)}>Approve</button>
@@ -202,6 +211,9 @@ export default function ActuationPanel({ session, act }) {
           )}
           {!isClinician && rec.status === 'pending' && (
             <div className="cue">Waiting for your therapist to review this</div>
+          )}
+          {!isClinician && rec.status === 'approved' && (
+            <span className="pill live"><i className="pill-dot" />Approved by your therapist</span>
           )}
         </div>
       )}

@@ -275,6 +275,8 @@ body {
 .act-summary-title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
 .act-summary-actions { display: flex; gap: 10px; margin-top: 10px; }
 .act-summary-actions .btn { margin-top: 0; flex: 1; }
+.act-rec-row { display: flex; justify-content: space-around; align-items: flex-start; width: 100%; gap: 12px; margin: 4px 0 10px; }
+.act-rec-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .act-jog { display: flex; gap: 10px; width: 100%; }
 .act-jog .btn { flex: 1; margin-top: 4px; user-select: none; }
 
