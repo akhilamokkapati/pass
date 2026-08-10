@@ -1,84 +1,136 @@
-// Builds a self-contained HTML session report and opens it with the browser's
-// print dialog so a clinician can save it straight to PDF (crisp vector text
-// and charts, no library). Falls back to an .html download if a popup blocker
-// stops the print window. No dependencies.
+// Builds the PASS session report as a real vector PDF (jsPDF) and downloads it
+// in one click - no print dialog, crisp text and charts. Layout mirrors the
+// on-screen cards: a row of stat boxes plus a sparkline per metric.
 
-function sparkSvg(vals, color) {
-  const v = vals.filter((x) => x != null)
-  if (v.length < 2) return '<div style="color:#999">no data</div>'
+import { jsPDF } from 'jspdf'
+
+const f = (v, d = 0) => (v == null ? '--' : (+v).toFixed(d))
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+// A row of stat boxes starting at (x, y). Returns the y of the row's bottom.
+function drawBoxes(doc, x, y, boxes) {
+  const w = 118, h = 50, gap = 9
+  boxes.forEach((b, i) => {
+    const bx = x + i * (w + gap)
+    doc.setDrawColor(227, 231, 236)
+    doc.setLineWidth(1)
+    doc.roundedRect(bx, y, w, h, 6, 6)
+    doc.setTextColor(20, 24, 31)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.text(String(b.val), bx + 10, y + 24)
+    doc.setTextColor(107, 116, 128)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.text(String(b.lbl), bx + 10, y + 40)
+  })
+  return y + h
+}
+
+// A sparkline of vals in the given colour. Returns the y of its bottom.
+function drawSpark(doc, x, y, vals, hex) {
+  const v = vals.filter((n) => n != null)
+  const w = 320, h = 55
+  if (v.length < 2) {
+    doc.setTextColor(150, 150, 150)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text('no data', x, y + 20)
+    return y + 24
+  }
   const min = Math.min(...v)
   const max = Math.max(...v)
-  const r = max - min || 1
-  const pts = v.map((y, i) => `${(i / (v.length - 1)) * 320},${60 - ((y - min) / r) * 54 - 3}`).join(' ')
-  return `<svg viewBox="0 0 320 60" width="320" height="60"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/></svg>`
+  const r = (max - min) || 1
+  const pts = v.map((val, i) => [
+    x + (i / (v.length - 1)) * w,
+    y + h - ((val - min) / r) * (h - 6) - 3,
+  ])
+  const [rr, gg, bb] = hexToRgb(hex)
+  doc.setDrawColor(rr, gg, bb)
+  doc.setLineWidth(1.5)
+  for (let i = 1; i < pts.length; i++) {
+    doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])
+  }
+  return y + h
+}
+
+// A section heading (uppercase, muted). Returns the y of its baseline.
+function drawHeading(doc, x, y, text) {
+  doc.setTextColor(91, 102, 117)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.text(text.toUpperCase(), x, y)
+  return y
 }
 
 export function downloadReport(m) {
   const hist = m?.hist || []
-  const kneeBox = (key, angleKey, reps, color) => {
+  const now = new Date()
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+  const M = 40                 // left margin
+  const CONTENT_W = 515        // A4 width (595) minus both margins
+
+  // Title
+  doc.setTextColor(20, 24, 31)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(18)
+  doc.text('PASS session report', M, 56)
+  doc.setTextColor(138, 148, 162)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.text('Generated ' + now.toLocaleString(), M, 72)
+
+  const kneeData = (key, angleKey, reps) => {
     const kv = hist.map((h) => h[key]).filter((x) => x != null)
     const romMax = kv.length ? Math.max(...kv) : null
     const romMin = kv.length ? Math.min(...kv) : null
     const rom = romMax != null ? romMax - romMin : null
-    return { kv, romMax, rom,
-      row: `${box(f(m?.[angleKey], 1) + ' deg', 'current')}${box(f(rom, 0) + ' deg', 'ROM')}${box(f(romMax, 0) + ' deg', 'max flexion')}${box(reps ?? 0, 'reps')}`,
-      spark: sparkSvg(kv, color) }
+    return {
+      kv,
+      boxes: [
+        { val: f(m?.[angleKey], 1) + ' deg', lbl: 'current' },
+        { val: f(rom, 0) + ' deg', lbl: 'ROM' },
+        { val: f(romMax, 0) + ' deg', lbl: 'max flexion' },
+        { val: reps ?? 0, lbl: 'reps' },
+      ],
+    }
   }
   const total = (m?.loadL || 0) + (m?.loadR || 0)
   const sym = total > 60 ? Math.round((m.loadL / total) * 100) : null
-  const f = (v, d = 0) => (v == null ? '--' : (+v).toFixed(d))
-  const now = new Date()
+  const kneeL = kneeData('kneeL', 'kneeLAngle', m?.repsL)
+  const kneeR = kneeData('kneeR', 'kneeRAngle', m?.repsR)
 
-  const box = (val, lbl) => `<div class=box><div class=val>${val}</div><div class=lbl>${lbl}</div></div>`
-  const kneeL = kneeBox('kneeL', 'kneeLAngle', m?.repsL, '#2b6fd6')
-  const kneeR = kneeBox('kneeR', 'kneeRAngle', m?.repsR, '#f6774b')
-
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>PASS session report</title>
-<style>
- body{font:14px system-ui,Segoe UI,Roboto,sans-serif;max-width:740px;margin:28px auto;padding:0 20px;color:#14181f}
- h1{font-size:22px;margin:0} h2{font-size:14px;color:#5b6675;text-transform:uppercase;letter-spacing:1px;margin:26px 0 8px}
- .muted{color:#8a94a2;font-size:12px} .row{display:flex;gap:12px;flex-wrap:wrap}
- .box{border:1px solid #e3e7ec;border-radius:10px;padding:10px 14px;min-width:120px}
- .val{font-size:22px;font-weight:800} .lbl{color:#6b7480;font-size:12px;margin-top:2px}
- .btn{margin-top:12px;padding:8px 14px;border:1px solid #cfd6de;border-radius:8px;background:#f5f7f9;cursor:pointer;font-weight:600}
- @media print{.noprint{display:none}}
-</style></head><body>
- <h1>PASS session report</h1>
- <div class=muted>Generated ${now.toLocaleString()}</div>
- <button class="btn noprint" onclick="window.print()">Save as PDF / print</button>
- <script>window.addEventListener('load',function(){setTimeout(function(){window.print()},250)})</script>
- <h2>Left knee flexion</h2>
- <div class=row>${kneeL.row}</div>
- <div style="margin-top:10px">${kneeL.spark}</div>
- <h2>Right knee flexion</h2>
- <div class=row>${kneeR.row}</div>
- <div style="margin-top:10px">${kneeR.spark}</div>
- <h2>Pelvis tilt</h2>
- <div class=row>${box(f(m?.hipTilt, 1) + ' deg', 'tilt from neutral')}</div>
- <div style="margin-top:10px">${sparkSvg(hist.map((h) => h.hip), '#c8890f')}</div>
- <h2>Foot loading and symmetry</h2>
- <div class=row>${box(f(m?.loadL, 0), 'left load')}${box(f(m?.loadR, 0), 'right load')}${box(sym == null ? '--' : sym + ' / ' + (100 - sym) + ' %', 'L / R split')}</div>
- <p class=muted>PASS, Patient Assessment Sensing System. Knee and pelvis angles from IMU quaternions (swing twist); foot loads from insole pressure in relative units. Validate against a goniometer and weighing scale before clinical use.</p>
-</body></html>`
-
-  // Open the report in a new window via a blob URL (no document.write). The
-  // embedded script fires the print dialog on load, where the clinician picks
-  // "Save as PDF". The window title becomes the suggested PDF filename.
-  const blob = new Blob([html], { type: 'text/html' })
-  const url = URL.createObjectURL(blob)
-  const win = window.open(url, '_blank')
-  if (win) {
-    // Release the object URL once the new window has had time to load it.
-    setTimeout(() => URL.revokeObjectURL(url), 60000)
-    return
+  let y = 104
+  const section = (title, boxes, vals, color) => {
+    y = drawHeading(doc, M, y, title) + 14
+    y = drawBoxes(doc, M, y, boxes) + 16
+    if (vals) y = drawSpark(doc, M, y, vals, color) + 26
+    else y += 6
   }
 
-  // Popup blocked: fall back to downloading the HTML so nothing is lost.
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `PASS-report-${now.toISOString().slice(0, 10)}.html`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  section('Left knee flexion', kneeL.boxes, kneeL.kv, '#2b6fd6')
+  section('Right knee flexion', kneeR.boxes, kneeR.kv, '#f6774b')
+  section('Pelvis tilt', [{ val: f(m?.hipTilt, 1) + ' deg', lbl: 'tilt from neutral' }],
+    hist.map((h) => h.hip), '#c8890f')
+  section('Foot loading and symmetry', [
+    { val: f(m?.loadL, 0), lbl: 'left load' },
+    { val: f(m?.loadR, 0), lbl: 'right load' },
+    { val: sym == null ? '--' : sym + ' / ' + (100 - sym) + ' %', lbl: 'L / R split' },
+  ], null)
+
+  // Disclaimer footer
+  doc.setTextColor(138, 148, 162)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  const disc = 'PASS, Patient Assessment Sensing System. Knee and pelvis angles from IMU ' +
+    'quaternions (swing twist); foot loads from insole pressure in relative units. ' +
+    'Validate against a goniometer and weighing scale before clinical use.'
+  doc.text(doc.splitTextToSize(disc, CONTENT_W), M, y + 6)
+
+  // One-click download, no dialog.
+  doc.save(`PASS-report-${now.toISOString().slice(0, 10)}.pdf`)
 }
