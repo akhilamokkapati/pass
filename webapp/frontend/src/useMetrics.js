@@ -86,7 +86,14 @@ const FORM_MIN_REP_S = 0.4
 // works at whatever rate packets actually arrive. The time constant is kept
 // well under FORM_MIN_REP_S so it damps jitter without blurring real rep
 // timing/peaks.
-const KNEE_SMOOTH_TAU_S = 0.12
+//
+// Was 0.12s (90%-of-step response ~0.28s), which read as visibly laggy for
+// a quick voluntary knee snap to a target angle - the display was still
+// visually "catching up" well after the real movement had stopped. Halved
+// to 0.06s (~0.14s to reach 90%) for noticeably snappier live tracking;
+// still comfortably under FORM_MIN_REP_S (0.4s) so it damps per-sample
+// noise without blurring genuine rep timing.
+const KNEE_SMOOTH_TAU_S = 0.06
 
 // Derives display metrics from the raw socket snapshot: foot loads (baseline
 // removed), left/right balance, hip tilt-from-neutral, knee rep counting, and a
