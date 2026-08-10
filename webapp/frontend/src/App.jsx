@@ -8,6 +8,8 @@ import ClinicianView from './ClinicianView.jsx'
 import GaitView from './GaitView.jsx'
 import DevicesPanel from './DevicesPanel.jsx'
 import ActuationPanel from './ActuationPanel.jsx'
+import ActuationFloatingWidget from './ActuationFloatingWidget.jsx'
+import { useActuationSession } from './useActuationSession.js'
 import SensorLogView from './SensorLogView.jsx'
 import CalibrateAllBar from './CalibrateAllBar.jsx'
 
@@ -36,6 +38,10 @@ function useTheme() {
 export default function App() {
   const { snap, connected } = useSocket()
   const { m, zeroHip, zeroFeet, resetReps, calibrateKneeL, calibrateKneeR, calibrateHips, calibrateHipTilt, calibrateBalance } = useMetrics(snap, { kneeTarget: KNEE_TARGET })
+  // Called here (not inside ActuationPanel) so the session survives
+  // switching tabs - see useActuationSession.js for why that used to reset
+  // an in-progress session back to idle the moment you left the Session tab.
+  const act = useActuationSession(m)
   const [session, setSession] = useState(() => getSession())
   const [theme, setTheme] = useTheme()
   // Own-role view vs the shared Gait tab - not a free-for-all switcher anymore;
@@ -146,8 +152,12 @@ export default function App() {
       {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} actions={actions} />}
       {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} actions={actions} />}
       {tab === 'gait' && <GaitView m={m} />}
-      {tab === 'session' && <ActuationPanel m={m} session={session} />}
+      {tab === 'session' && <ActuationPanel session={session} act={act} />}
       {tab === 'logs' && <SensorLogView />}
+
+      {tab !== 'session' && (
+        <ActuationFloatingWidget act={act} session={session} onGoToSession={() => setTab('session')} />
+      )}
 
       <footer className="foot-note">Live over WiFi · {connected ? 'streaming ~20×/sec' : 'reconnecting…'}</footer>
     </div>
