@@ -36,7 +36,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ingest, sessions, sensor_log
+from . import ai_summary, ingest, sessions, sensor_log
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 FRONTEND_DIST = REPO / "webapp" / "frontend" / "dist"
@@ -177,6 +177,16 @@ async def api_actuation_recommendation_respond(request: Request) -> dict:
     if result is None:
         raise HTTPException(status_code=409, detail="no recommendation is currently pending")
     return {"recommendation": result}
+
+
+@app.post("/api/ai/summary")
+async def api_ai_summary() -> dict:
+    """Generates a plain-language progress summary + exercise suggestions
+    from the persisted sensor/actuation history via a real Claude API call
+    (see ai_summary.py) - runs a coroutine's worth of blocking HTTP under the
+    hood, so it's offloaded to a thread rather than blocking the event loop
+    (and every other connected client's WebSocket tick) while it waits."""
+    return await asyncio.to_thread(ai_summary.generate_summary)
 
 
 @app.post("/api/sensors/snapshot")

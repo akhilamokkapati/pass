@@ -323,6 +323,9 @@ body {
 .clinician-head { display: flex; align-items: center; justify-content: space-between; }
 .clinician-head-actions { display: flex; align-items: center; gap: 8px; }
 .clinician-title { color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+
+.ai-summary-card .card-head .btn { margin-top: 0; }
+.ai-summary-text { white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: var(--text); }
 .legend-inline { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.blue { background: #4ea1ff; } .dot.orange { background: #f6774b; }

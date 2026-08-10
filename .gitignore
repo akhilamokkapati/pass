@@ -24,6 +24,10 @@ hugadb/
 webapp/backend/sessions.db
 webapp/backend/sensor_log.db
 
+# Secrets - never commit an API key (see webapp/backend/.env.example)
+.env
+webapp/backend/.env
+
 # OS / editor cruft
 Thumbs.db
 .DS_Store
