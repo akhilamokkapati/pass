@@ -33,13 +33,13 @@ const KNEE_AXIS = new THREE.Vector3(1, 0, 0)
 const KNEE_SIGN = 1
 
 // Same idea as KNEE_AXIS/KNEE_SIGN, for the thigh (UpLeg) bone driven by
-// hipFlexL/R. Starting guess matches the knee's convention (both are
-// sagittal-plane hinges), but this has NOT been visually verified against a
-// live calibrated hip-flexion reading yet the way the knee axis was - if the
-// thigh swings the wrong way (or backwards) once this is live, flip
-// HIP_FLEX_SIGN to -1 first before touching the axis itself.
+// hipFlexL/R. Started as an unverified guess matching the knee's convention
+// (both are sagittal-plane hinges) - confirmed wrong once tested live: lifting
+// the knee forward (or bending forward at the hip while sitting) swung the
+// thigh backward instead. Flipped per the plan already noted here; axis
+// itself didn't need to change.
 const HIP_FLEX_AXIS = new THREE.Vector3(1, 0, 0)
-const HIP_FLEX_SIGN = 1
+const HIP_FLEX_SIGN = -1
 
 // Upper body follows the same hip-tilt lean, at a fraction of the angle -
 // a real torso doesn't rigidly copy the pelvis 1:1, it continues the lean
