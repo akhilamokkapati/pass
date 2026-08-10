@@ -339,7 +339,14 @@ body {
 .clinician-title { color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
 
 .ai-summary-card .card-head .btn { margin-top: 0; }
-.ai-summary-text { white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: var(--text); }
+.ai-summary-text { line-height: 1.6; font-size: 14px; color: var(--text); }
+.ai-summary-text .ai-h { margin: 18px 0 6px; font-size: 15px; font-weight: 700; color: var(--text); }
+.ai-summary-text .ai-h:first-child { margin-top: 0; }
+.ai-summary-text .ai-p { margin: 0 0 10px; }
+.ai-summary-text .ai-li { margin: 0 0 10px; padding-left: 22px; text-indent: -22px; }
+.ai-summary-text .ai-li-num { font-weight: 700; color: var(--text); }
+.ai-summary-text .ai-hr { border: 0; border-top: 1px solid var(--line, rgba(120,130,150,.25)); margin: 14px 0; }
+.ai-summary-text strong { font-weight: 700; color: var(--text); }
 .legend-inline { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.blue { background: #4ea1ff; } .dot.orange { background: #f6774b; }

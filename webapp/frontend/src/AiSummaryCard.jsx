@@ -7,6 +7,55 @@
 
 import { useState } from 'react'
 
+// Gemini replies in markdown (### headings, **bold**, --- dividers, numbered
+// lists). We render just that small subset ourselves rather than pull in a
+// full markdown dependency - keeps the bundle lean and avoids an npm install.
+
+// Split a line into plain + bold runs on **...** and render each run.
+function renderInline(line, keyBase) {
+  const parts = line.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={`${keyBase}-${i}`}>{part.slice(2, -2)}</strong>
+    }
+    return part
+  })
+}
+
+function renderMarkdown(text) {
+  const lines = text.split('\n')
+  const out = []
+
+  lines.forEach((raw, i) => {
+    const line = raw.trimEnd()
+    const key = `md-${i}`
+
+    if (line.trim() === '') return                         // collapse blank lines
+    if (/^-{3,}$/.test(line.trim())) {                      // --- divider
+      out.push(<hr key={key} className="ai-hr" />)
+      return
+    }
+    const heading = line.match(/^#{1,6}\s+(.*)$/)          // ### heading
+    if (heading) {
+      out.push(<h4 key={key} className="ai-h">{renderInline(heading[1], key)}</h4>)
+      return
+    }
+    const numbered = line.match(/^(\d+)\.\s+(.*)$/)        // 1. list item
+    if (numbered) {
+      out.push(
+        <p key={key} className="ai-li">
+          <span className="ai-li-num">{numbered[1]}.</span>{' '}
+          {renderInline(numbered[2], key)}
+        </p>
+      )
+      return
+    }
+    out.push(<p key={key} className="ai-p">{renderInline(line, key)}</p>)
+  })
+
+  return out
+}
+
 export default function AiSummaryCard() {
   const [state, setState] = useState('idle')   // idle | loading | done | error
   const [text, setText] = useState('')
@@ -40,7 +89,7 @@ export default function AiSummaryCard() {
       )}
       {state === 'loading' && <div className="cue">Reading recent history and asking Gemini…</div>}
       {state === 'error' && <div className="cal-msg">{text}</div>}
-      {state === 'done' && <div className="ai-summary-text">{text}</div>}
+      {state === 'done' && <div className="ai-summary-text">{renderMarkdown(text)}</div>}
     </section>
   )
 }
