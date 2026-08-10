@@ -50,6 +50,16 @@ function renderMarkdown(text) {
       )
       return
     }
+    const bullet = line.match(/^\s*[*-]\s+(.*)$/)          // * or - sub-bullet
+    if (bullet) {
+      out.push(
+        <p key={key} className="ai-bullet">
+          <span className="ai-bullet-dot">•</span>{' '}
+          {renderInline(bullet[1], key)}
+        </p>
+      )
+      return
+    }
     out.push(<p key={key} className="ai-p">{renderInline(line, key)}</p>)
   })
 
