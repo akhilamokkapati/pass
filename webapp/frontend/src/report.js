@@ -1,6 +1,6 @@
 // Builds the PASS session report as a real vector PDF (jsPDF) and downloads it
-// in one click - no print dialog, crisp text and charts. Layout mirrors the
-// on-screen cards: a row of stat boxes plus a sparkline per metric.
+// in one click - no print dialog, crisp text and charts. Each metric is a card
+// with a colour-accented heading, a row of stat tiles, and an area sparkline.
 
 import { jsPDF } from 'jspdf'
 
@@ -10,79 +10,138 @@ function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
-
-// A row of stat boxes starting at (x, y). Returns the y of the row's bottom.
-function drawBoxes(doc, x, y, boxes) {
-  const w = 118, h = 50, gap = 9
-  boxes.forEach((b, i) => {
-    const bx = x + i * (w + gap)
-    doc.setDrawColor(227, 231, 236)
-    doc.setLineWidth(1)
-    doc.roundedRect(bx, y, w, h, 6, 6)
-    doc.setTextColor(20, 24, 31)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(15)
-    doc.text(String(b.val), bx + 10, y + 24)
-    doc.setTextColor(107, 116, 128)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.text(String(b.lbl), bx + 10, y + 40)
-  })
-  return y + h
+function lighten([r, g, b], t) {
+  return [Math.round(r + (255 - r) * t), Math.round(g + (255 - g) * t), Math.round(b + (255 - b) * t)]
 }
 
-// A sparkline of vals in the given colour. Returns the y of its bottom.
-function drawSpark(doc, x, y, vals, hex) {
+// Card background panel.
+function drawCardBg(doc, x, y, w, h) {
+  doc.setFillColor(248, 250, 252)
+  doc.setDrawColor(230, 235, 241)
+  doc.setLineWidth(1)
+  doc.roundedRect(x, y, w, h, 10, 10, 'FD')
+}
+
+// Colour dot + section title. `baseY` is the text baseline.
+function drawCardHeading(doc, x, baseY, text, hex) {
+  const [r, g, b] = hexToRgb(hex)
+  doc.setFillColor(r, g, b)
+  doc.circle(x + 3, baseY - 3, 3, 'F')
+  doc.setTextColor(30, 36, 46)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text(text, x + 13, baseY)
+}
+
+// A row of stat tiles. Returns the tile height.
+function drawTiles(doc, x, y, w, tiles) {
+  const n = tiles.length
+  const gap = 10
+  const tw = (w - (n - 1) * gap) / n
+  const th = 48
+  tiles.forEach((t, i) => {
+    const tx = x + i * (tw + gap)
+    doc.setFillColor(255, 255, 255)
+    doc.setDrawColor(228, 233, 239)
+    doc.setLineWidth(1)
+    doc.roundedRect(tx, y, tw, th, 7, 7, 'FD')
+    const num = String(t.num)
+    doc.setTextColor(24, 28, 36)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.text(num, tx + 11, y + 23)
+    if (t.unit && num !== '--') {
+      const nw = doc.getTextWidth(num)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.setTextColor(140, 146, 156)
+      doc.text(t.unit, tx + 11 + nw + 3, y + 23)
+    }
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(120, 127, 138)
+    doc.text(String(t.lbl), tx + 11, y + 39)
+  })
+  return th
+}
+
+// Area sparkline in the given colour, framed by a faint baseline.
+function drawChart(doc, x, y, w, h, vals, hex) {
   const v = vals.filter((n) => n != null)
-  const w = 320, h = 55
+  const [rr, gg, bb] = hexToRgb(hex)
+
   if (v.length < 2) {
-    doc.setTextColor(150, 150, 150)
+    doc.setDrawColor(230, 234, 239)
+    doc.setLineWidth(0.75)
+    doc.line(x, y + h, x + w, y + h)
+    doc.setTextColor(150, 156, 166)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
-    doc.text('no data', x, y + 20)
-    return y + 24
+    doc.text('no data yet', x, y + h / 2)
+    return
   }
+
   const min = Math.min(...v)
   const max = Math.max(...v)
   const r = (max - min) || 1
   const pts = v.map((val, i) => [
     x + (i / (v.length - 1)) * w,
-    y + h - ((val - min) / r) * (h - 6) - 3,
+    y + h - ((val - min) / r) * (h - 8) - 4,
   ])
-  const [rr, gg, bb] = hexToRgb(hex)
+
+  // Area fill (light tint of the line colour).
+  const segs = [[pts[0][0] - x, pts[0][1] - (y + h)]]
+  for (let i = 1; i < pts.length; i++) segs.push([pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]])
+  const last = pts[pts.length - 1]
+  segs.push([(x + w) - last[0], (y + h) - last[1]])
+  doc.setFillColor(...lighten([rr, gg, bb], 0.86))
+  doc.lines(segs, x, y + h, [1, 1], 'F', true)
+
+  // Baseline.
+  doc.setDrawColor(230, 234, 239)
+  doc.setLineWidth(0.75)
+  doc.line(x, y + h, x + w, y + h)
+
+  // Top line.
   doc.setDrawColor(rr, gg, bb)
-  doc.setLineWidth(1.5)
-  for (let i = 1; i < pts.length; i++) {
-    doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])
-  }
-  return y + h
+  doc.setLineWidth(1.6)
+  doc.setLineJoin('round')
+  doc.setLineCap('round')
+  for (let i = 1; i < pts.length; i++) doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])
+
+  // Min / max labels, right-aligned.
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(140, 146, 156)
+  doc.text(String(Math.round(max)), x + w, y + 8, { align: 'right' })
+  doc.text(String(Math.round(min)), x + w, y + h - 2, { align: 'right' })
 }
 
-// A section heading (uppercase, muted). Returns the y of its baseline.
-function drawHeading(doc, x, y, text) {
-  doc.setTextColor(91, 102, 117)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9)
-  doc.text(text.toUpperCase(), x, y)
-  return y
-}
-
-export function downloadReport(m) {
+// Draws the whole report and returns the jsPDF doc (kept separate from the
+// download so it can be rendered/inspected without a browser save dialog).
+export function buildReportDoc(m) {
   const hist = m?.hist || []
   const now = new Date()
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-  const M = 40                 // left margin
-  const CONTENT_W = 515        // A4 width (595) minus both margins
+  const PAGE_W = 595
+  const M = 40
+  const W = PAGE_W - 2 * M
 
-  // Title
-  doc.setTextColor(20, 24, 31)
+  // Top accent stripe + header.
+  doc.setFillColor(43, 111, 214)
+  doc.rect(0, 0, PAGE_W, 6, 'F')
+  doc.setTextColor(24, 28, 36)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(18)
-  doc.text('PASS session report', M, 56)
-  doc.setTextColor(138, 148, 162)
+  doc.setFontSize(20)
+  doc.text('PASS session report', M, 62)
+  doc.setTextColor(140, 146, 156)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  doc.text('Generated ' + now.toLocaleString(), M, 72)
+  doc.text('Patient Assessment Sensing System', M, 78)
+  doc.text('Generated ' + now.toLocaleString(), PAGE_W - M, 62, { align: 'right' })
+  doc.setDrawColor(230, 235, 241)
+  doc.setLineWidth(1)
+  doc.line(M, 92, PAGE_W - M, 92)
 
   const kneeData = (key, angleKey, reps) => {
     const kv = hist.map((h) => h[key]).filter((x) => x != null)
@@ -91,11 +150,11 @@ export function downloadReport(m) {
     const rom = romMax != null ? romMax - romMin : null
     return {
       kv,
-      boxes: [
-        { val: f(m?.[angleKey], 1) + ' deg', lbl: 'current' },
-        { val: f(rom, 0) + ' deg', lbl: 'ROM' },
-        { val: f(romMax, 0) + ' deg', lbl: 'max flexion' },
-        { val: reps ?? 0, lbl: 'reps' },
+      tiles: [
+        { num: f(m?.[angleKey], 1), unit: 'deg', lbl: 'current' },
+        { num: f(rom, 0), unit: 'deg', lbl: 'ROM' },
+        { num: f(romMax, 0), unit: 'deg', lbl: 'max flexion' },
+        { num: reps ?? 0, unit: '', lbl: 'reps' },
       ],
     }
   }
@@ -104,33 +163,46 @@ export function downloadReport(m) {
   const kneeL = kneeData('kneeL', 'kneeLAngle', m?.repsL)
   const kneeR = kneeData('kneeR', 'kneeRAngle', m?.repsR)
 
-  let y = 104
-  const section = (title, boxes, vals, color) => {
-    y = drawHeading(doc, M, y, title) + 14
-    y = drawBoxes(doc, M, y, boxes) + 16
-    if (vals) y = drawSpark(doc, M, y, vals, color) + 26
-    else y += 6
+  let y = 108
+  const card = (title, hex, tiles, vals) => {
+    const hasChart = vals !== null && vals !== undefined
+    const cardH = hasChart ? 162 : 94
+    drawCardBg(doc, M, y, W, cardH)
+    drawCardHeading(doc, M + 14, y + 24, title, hex)
+    const tilesTop = y + 36
+    drawTiles(doc, M + 14, tilesTop, W - 28, tiles)
+    if (hasChart) drawChart(doc, M + 14, tilesTop + 48 + 16, W - 28, 50, vals, hex)
+    y += cardH + 14
   }
 
-  section('Left knee flexion', kneeL.boxes, kneeL.kv, '#2b6fd6')
-  section('Right knee flexion', kneeR.boxes, kneeR.kv, '#f6774b')
-  section('Pelvis tilt', [{ val: f(m?.hipTilt, 1) + ' deg', lbl: 'tilt from neutral' }],
-    hist.map((h) => h.hip), '#c8890f')
-  section('Foot loading and symmetry', [
-    { val: f(m?.loadL, 0), lbl: 'left load' },
-    { val: f(m?.loadR, 0), lbl: 'right load' },
-    { val: sym == null ? '--' : sym + ' / ' + (100 - sym) + ' %', lbl: 'L / R split' },
+  card('Left knee flexion', '#2b6fd6', kneeL.tiles, kneeL.kv)
+  card('Right knee flexion', '#f6774b', kneeR.tiles, kneeR.kv)
+  card('Pelvis tilt', '#c8890f',
+    [{ num: f(m?.hipTilt, 1), unit: 'deg', lbl: 'tilt from neutral' }],
+    hist.map((h) => h.hip))
+  card('Foot loading and symmetry', '#2e9e6b', [
+    { num: f(m?.loadL, 0), unit: '', lbl: 'left load' },
+    { num: f(m?.loadR, 0), unit: '', lbl: 'right load' },
+    { num: sym == null ? '--' : sym + ' / ' + (100 - sym), unit: '%', lbl: 'L / R split' },
   ], null)
 
-  // Disclaimer footer
-  doc.setTextColor(138, 148, 162)
+  // Footer rule + disclaimer.
+  doc.setDrawColor(230, 235, 241)
+  doc.setLineWidth(1)
+  doc.line(M, y, PAGE_W - M, y)
+  doc.setTextColor(150, 156, 166)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
+  doc.setFontSize(8)
   const disc = 'PASS, Patient Assessment Sensing System. Knee and pelvis angles from IMU ' +
     'quaternions (swing twist); foot loads from insole pressure in relative units. ' +
     'Validate against a goniometer and weighing scale before clinical use.'
-  doc.text(doc.splitTextToSize(disc, CONTENT_W), M, y + 6)
+  doc.text(doc.splitTextToSize(disc, W), M, y + 16)
 
-  // One-click download, no dialog.
-  doc.save(`PASS-report-${now.toISOString().slice(0, 10)}.pdf`)
+  return doc
+}
+
+// One-click download, no dialog.
+export function downloadReport(m) {
+  const doc = buildReportDoc(m)
+  doc.save(`PASS-report-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
