@@ -146,7 +146,7 @@ export default function App() {
             30.007 network and live data appears here automatically.</div>
         </div>
       ) : (
-        <CalibrateAllBar m={m} actions={actions} />
+        session.role !== 'clinician' && <CalibrateAllBar m={m} actions={actions} />
       )}
 
       {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} actions={actions} />}
