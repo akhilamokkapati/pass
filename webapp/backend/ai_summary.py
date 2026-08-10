@@ -33,8 +33,15 @@ from . import sensor_log, sessions
 
 load_dotenv(pathlib.Path(__file__).resolve().parent / ".env")
 
-MODEL = "gemini-2.5-flash"
-MAX_OUTPUT_TOKENS = 700
+MODEL = "gemini-flash-latest"   # Google-maintained alias, not a pinned version -
+                                 # avoids this breaking again next time a specific
+                                 # version gets retired for new API keys
+# Whatever model "latest" currently resolves to spends some of this budget on
+# internal reasoning before the visible answer - a low limit (originally 700)
+# let the reasoning eat the whole budget and cut the summary off before it
+# started. Passing thinking_budget=0 to turn reasoning off entirely errored
+# on this model (INVALID_ARGUMENT), so the fix is just enough headroom.
+MAX_OUTPUT_TOKENS = 3000
 
 SYSTEM_PROMPT = (
     "You are assisting a physical therapist reviewing a patient's wearable "
