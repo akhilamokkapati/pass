@@ -13,17 +13,15 @@
 // not a fake sensor reading.
 //
 // Role split: the clinician does not run the patient's session - the level
-// picker, Start, in-session Stop, AND the manual Twist/Untwist jog controls
-// are all patient-only, since it's the patient's body wearing/operating the
-// actuator. Instead, the backend (webapp/backend/sessions.py) looks at the
-// patient's logged session history and recommends the next weight to try;
-// the clinician's job on this tab is reviewing that history and approving/
-// rejecting the recommendation, nothing hands-on. Force Stop is the one
-// control available to BOTH roles - it's a safety escape hatch, not a way to
-// run the exercise, so it shouldn't require the patient to be the one
-// holding it. The recommendation itself is a nudge, not a lock - once
-// approved it just surfaces a "use this weight" button on the patient's
-// side, it doesn't auto-start anything or block other levels.
+// picker, Start, in-session Stop, the manual Twist/Untwist jog controls, AND
+// Force Stop are all patient-only, since it's the patient's body wearing/
+// operating the actuator. Instead, the backend (webapp/backend/sessions.py)
+// looks at the patient's logged session history and recommends the next
+// weight to try; the clinician's job on this tab is reviewing that history
+// and approving/rejecting the recommendation, nothing hands-on. The
+// recommendation itself is a nudge, not a lock - once approved it just
+// surfaces a "use this weight" button on the patient's side, it doesn't
+// auto-start anything or block other levels.
 
 import { useEffect, useRef, useState } from 'react'
 import { StatusPill } from './ui.jsx'
@@ -382,7 +380,9 @@ export default function ActuationPanel({ m, session }) {
         </div>
       )}
 
-      <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
+      {!isClinician && (
+        <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
+      )}
 
       <ActuationLogCard refreshKey={logRefreshKey} />
     </div>
