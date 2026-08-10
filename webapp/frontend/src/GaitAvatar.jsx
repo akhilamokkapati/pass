@@ -41,14 +41,6 @@ const KNEE_SIGN = 1
 const HIP_FLEX_AXIS = new THREE.Vector3(1, 0, 0)
 const HIP_FLEX_SIGN = -1
 
-// Upper body follows the same hip-tilt lean, at a fraction of the angle -
-// a real torso doesn't rigidly copy the pelvis 1:1, it continues the lean
-// more gently up the spine. Only meaningful now that hipTiltDeg is the real
-// SIGNED value (see calibrateHipTilt in useMetrics.js) - this was NOT worth
-// adding while hip tilt was unsigned, since it would've just doubled down on
-// the "only ever leans one way" bug on two bones instead of one.
-const TORSO_LEAN_FRACTION = 0.5
-
 // There's no ankle IMU, so the foot has no measured angle - only a contact
 // PHASE from the feet FSRs (useMetrics: footPhaseL/R, derived from the
 // heel/toe-specific channels). This is a bounded visual cue, not a
@@ -87,15 +79,26 @@ const FOOT_EASE_PER_SEC = 10
 //    the right answer when `rest` is identity (Xbot). Fixed: the arm bone's
 //    quaternion is set to `correction` directly, nothing folded in.
 //
-// 3) `correction` rotates the LOCAL rest direction to ARM_TARGET_DIR, but
-//    the arm bone's quaternion is itself LOCAL - relative to its parent (the
-//    shoulder). world = parentWorld * local, so "local -Y" only means
+// 3) `correction` rotates the LOCAL rest direction to the target direction,
+//    but the arm bone's quaternion is itself LOCAL - relative to its parent
+//    (the shoulder). world = parentWorld * local, so "local -Y" only means
 //    "world down" when the shoulder's own WORLD rotation is identity (Xbot,
-//    again). Fixed: ARM_TARGET_DIR gets rotated into the shoulder's current
-//    local frame (by the inverse of the shoulder's world quaternion) before
-//    solving for `correction`, so the result points down in the SCENE
+//    again). Fixed: the target gets rotated into the shoulder's current local
+//    frame (by the inverse of the shoulder's world quaternion) before solving
+//    for `correction`, so the result points the right way in the SCENE
 //    regardless of what the shoulder bone itself is doing.
-const ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
+//
+// A-pose, not straight down: each arm's WORLD-space target is angled 40 deg
+// outward from vertical (about the Z axis) so the arms rest away from the
+// body. Left points toward +X, right toward -X. Because the correction rotates
+// each target into the shoulder's own local frame, this holds across every rig
+// regardless of its baked shoulder orientation. (If the arms come out crossed
+// on some model, swap the two target vectors.)
+const ARM_OUT_DEG = 40
+const LEFT_ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
+  .applyAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(ARM_OUT_DEG))
+const RIGHT_ARM_TARGET_DIR = new THREE.Vector3(0, -1, 0)
+  .applyAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(-ARM_OUT_DEG))
 
 // Shared rig-driving logic for any loaded skeleton, regardless of which
 // loader produced it (GLTFLoader vs FBXLoader both yield a normal three.js
@@ -126,24 +129,24 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
 
     armDownQuat.current = {}
     const b = bones.current
-    const armCorrection = (armBone, foreArmBone) => {
+    const armCorrection = (armBone, foreArmBone, targetWorldDir) => {
       if (!armBone || !foreArmBone || foreArmBone.position.lengthSq() < 1e-8 || !armBone.parent) return null
       const restDir = foreArmBone.position.clone().normalize()
-      // ARM_TARGET_DIR is a WORLD-space direction (straight down); the arm
-      // bone's own quaternion is LOCAL (relative to its parent, the
-      // shoulder). Composing world = parentWorld * local means the target
-      // this local quaternion needs to hit is ARM_TARGET_DIR rotated into
-      // the shoulder's local frame, i.e. by the INVERSE of the shoulder's
-      // current world rotation - not ARM_TARGET_DIR directly. Skipping this
-      // step is what sent Michelle's arms up instead of down: her shoulder
-      // bone's own rest rotation isn't identity the way Xbot's is, so a
-      // "local -Y" target meant something other than world-down for her.
+      // targetWorldDir is a WORLD-space direction (down, angled 40 deg out);
+      // the arm bone's own quaternion is LOCAL (relative to its parent, the
+      // shoulder). Composing world = parentWorld * local means the target this
+      // local quaternion needs to hit is targetWorldDir rotated into the
+      // shoulder's local frame, i.e. by the INVERSE of the shoulder's current
+      // world rotation - not targetWorldDir directly. Skipping this step is
+      // what sent Michelle's arms up instead of down: her shoulder bone's own
+      // rest rotation isn't identity the way Xbot's is, so a "local -Y" target
+      // meant something other than world-down for her.
       const parentWorldQuat = armBone.parent.getWorldQuaternion(new THREE.Quaternion())
-      const localTarget = ARM_TARGET_DIR.clone().applyQuaternion(parentWorldQuat.invert())
+      const localTarget = targetWorldDir.clone().applyQuaternion(parentWorldQuat.invert())
       return new THREE.Quaternion().setFromUnitVectors(restDir, localTarget)
     }
-    armDownQuat.current.left = armCorrection(b.leftArm, b.leftForeArm)
-    armDownQuat.current.right = armCorrection(b.rightArm, b.rightForeArm)
+    armDownQuat.current.left = armCorrection(b.leftArm, b.leftForeArm, LEFT_ARM_TARGET_DIR)
+    armDownQuat.current.right = armCorrection(b.rightArm, b.rightForeArm, RIGHT_ARM_TARGET_DIR)
   }, [root])
 
   useFrame((_state, delta) => {
@@ -161,22 +164,30 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
     }
     if (hipTiltDeg != null) {
       const clamped = THREE.MathUtils.clamp(hipTiltDeg, -30, 30)
+      // Freeze the Hips (pelvis root) at its rest pose. Hips is the root of the
+      // skeleton, so rotating it swings the whole avatar - legs, torso, arms -
+      // in world space. Holding it still keeps the lower body planted.
       if (b.hips && rest.hips) {
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped))
-        b.hips.quaternion.copy(rest.hips).multiply(q)
+        b.hips.quaternion.copy(rest.hips)
       }
+      // Drive the full tilt into the Spine instead, so only the upper body
+      // leans relative to the frozen pelvis.
       if (b.spine && rest.spine) {
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped * TORSO_LEAN_FRACTION))
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(clamped))
         b.spine.quaternion.copy(rest.spine).multiply(q)
       }
     }
+    // Floor at -30 (not 0) so the thigh can extend backward behind the body,
+    // not just swing forward. Human hip flexion goes forward (positive) AND
+    // extends backward (negative) during push-off; clamping at 0 flattened all
+    // extension to a neutral standing line. -30 deg is a realistic extension limit.
     if (b.leftHip && rest.leftHip) {
-      const flex = THREE.MathUtils.degToRad(Math.max(0, hipFlexLDeg ?? 0)) * HIP_FLEX_SIGN
+      const flex = THREE.MathUtils.degToRad(Math.max(-30, hipFlexLDeg ?? 0)) * HIP_FLEX_SIGN
       const q = new THREE.Quaternion().setFromAxisAngle(HIP_FLEX_AXIS, flex)
       b.leftHip.quaternion.copy(rest.leftHip).multiply(q)
     }
     if (b.rightHip && rest.rightHip) {
-      const flex = THREE.MathUtils.degToRad(Math.max(0, hipFlexRDeg ?? 0)) * HIP_FLEX_SIGN
+      const flex = THREE.MathUtils.degToRad(Math.max(-30, hipFlexRDeg ?? 0)) * HIP_FLEX_SIGN
       const q = new THREE.Quaternion().setFromAxisAngle(HIP_FLEX_AXIS, flex)
       b.rightHip.quaternion.copy(rest.rightHip).multiply(q)
     }
@@ -198,8 +209,8 @@ function useAvatarRig(root, { kneeLDeg, kneeRDeg, hipTiltDeg, hipFlexLDeg, hipFl
       b.rightFoot.quaternion.copy(rest.rightFoot).multiply(q)
     }
 
-    // Not composed onto `rest` like every other bone above - see the
-    // ARM_TARGET_DIR comment: this correction replaces the rest pose rather
+    // Not composed onto `rest` like every other bone above - see the arm
+    // target/correction comment: this correction replaces the rest pose rather
     // than adding to it, so `rest` must NOT be folded in here.
     const armDown = armDownQuat.current
     if (b.leftArm && armDown.left) {
