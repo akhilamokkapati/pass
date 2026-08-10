@@ -277,7 +277,19 @@ body {
 .act-summary-actions .btn { margin-top: 0; flex: 1; }
 .act-jog { display: flex; gap: 10px; width: 100%; }
 .act-jog .btn { flex: 1; margin-top: 4px; user-select: none; }
-.act-force-stop { grid-column: 1 / -1; font-weight: 700; letter-spacing: .3px; }
+
+/* Shared big circular stop button - used by both the Session card's
+   in-exercise Stop and Manual Control's Force Stop, so the two read as the
+   same "hit this to stop the motor" action regardless of context. */
+.stop-circle {
+  width: 96px; height: 96px; border-radius: 50%; border: 0;
+  display: flex; align-items: center; justify-content: center;
+  margin: 10px auto 0; padding: 0;
+  font-weight: 700; font-size: 14px; letter-spacing: .3px;
+  color: #fff; background: var(--danger); cursor: pointer;
+}
+.stop-circle:hover { background: var(--danger-hover); }
+.stop-circle:active { background: var(--danger-active); }
 
 /* ---- logs tab ---- */
 .log-card .card-head { margin-bottom: 14px; }

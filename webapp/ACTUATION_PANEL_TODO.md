@@ -8,11 +8,24 @@ webapp-only.
 
 ## Graph
 
-- [ ] Rename "Actuation" section/card -> "Session Data"
-- [ ] Investigate: force data appears to be influencing the set-force input
-      (feedback loop bug - the setpoint shouldn't move on its own from the
-      live reading)
-- [ ] Rename the graph itself -> "Force Monitoring"
+- [x] Rename "Actuation" section/card -> "Session Data"
+- [x] Investigate: force data appears to be influencing the set-force input.
+      **Traced through `useActuationSession.js` - not a code bug.** `target`
+      (from `sessionRef.current.target`) and `level` (the KG button
+      selection) are never derived from `tension` anywhere; they're fully
+      independent state. What's actually happening: with no real strain
+      gauge wired up yet, `angle_pid_wifi_test.cpp` sends raw encoder counts
+      in the `tension_n` slot as a placeholder (see
+      `actuation/Firmware/prototyping/angle_pid_wifi_test.cpp`) - so the
+      "Actual" reading swings to nonsensical values (e.g. -356 kg) next to a
+      steady "Target 1 kg", which *looks* like cross-talk but is just the
+      known placeholder-data caveat. Resolves itself once a real strain
+      gauge (or at least a sane clamp/scale) feeds `tension_n`; no webapp
+      change needed.
+- [x] Rename the graph itself -> "Force Monitoring"
+- [x] Remove the "board state: ..." line from the Session Data card (was
+      showing the firmware's internal serial-state-machine name, not
+      patient/clinician-relevant info)
 
 ## Session
 
@@ -38,19 +51,39 @@ webapp-only.
       side, show reps done vs. reps remaining (needs a data source - knee
       module doesn't currently feed the actuation panel; this is a new
       cross-subsystem wire-up, not just a UI change)
-- [ ] Replace the small "Stop" button with a big, circular, red stop button
-      (same visual treatment as the Manual Control stop button below)
+- [x] Replace the small "Stop" button with a big, circular, red stop button
+      (same visual treatment as the Manual Control stop button below) - added
+      a shared `.stop-circle` style in `styles.css`, used by both this and
+      Manual Control's Force Stop.
 
 ## Recommendation
 
-- [ ] Recommendation content changes based on the selected exercise
-- [ ] Include PT-recommended rep count (needs a source for "PT recommended" -
-      clinician-entered? fixed per exercise? not yet specified)
+- [x] Recommendation content changes based on the selected exercise. Added a
+      minimal client-side-only exercise selector (`EXERCISES` in
+      `useActuationSession.js`: knee extension / hamstring curl) since no
+      exercise concept existed anywhere (not in the UI, not in
+      `sessions.py`/the sessions database). The recommendation card now shows
+      the selected exercise's label; the actual kg/reason logic is still
+      pure weight-progression from `sessions.py` (unchanged) - it doesn't
+      yet know exercise type, it's just labeled per-exercise on screen.
+      Revisit if recommendations should actually differ by exercise, which
+      would need an `exercise` column added to `actuation_sessions` and
+      `recommend_next_kg()` filtering by it.
+- [x] Include PT-recommended rep count. **Placeholder data, not real PT
+      input** - each exercise in `EXERCISES` has a hardcoded `ptReps` (knee
+      extension: 10, hamstring curl: 8). Swap for a real source once one
+      exists (clinician-entered? a fixed table someone provides?).
 
 ## Manual Control
 
-- [ ] Replace the horizontal "Force stop" button with the same big circular
-      stop button used in Session
-- [ ] Twist/Untwist controls both motors simultaneously (for now - not
-      antagonistic/independent control yet, matches §9 of Actuation Context.md
-      being future/not-current-scope)
+- [x] Replace the horizontal "Force stop" button with the same big circular
+      stop button used in Session - Force Stop also moved to live inside the
+      Manual Control card itself (was a separate full-width button below it
+      before).
+- [x] Twist/Untwist controls both motors simultaneously (for now). No webapp
+      change needed - the UI already only exposes one universal Twist/
+      Untwist pair, no per-motor selector exists to remove. The actual
+      "drives both motors together" behavior is a firmware concern for
+      whenever `twist`/`untwist` commands get mapped onto real motor control
+      (currently logged-only, not acted on - see
+      `actuation/Firmware/prototyping/angle_pid_wifi_test.cpp`).
