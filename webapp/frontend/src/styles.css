@@ -349,6 +349,7 @@ body {
 .ai-summary-text .ai-bullet-dot { color: var(--muted); }
 .ai-summary-text .ai-hr { border: 0; border-top: 1px solid var(--line, rgba(120,130,150,.25)); margin: 14px 0; }
 .ai-summary-text strong { font-weight: 700; color: var(--text); }
+.ai-updated { margin-top: 10px; font-size: 12px; color: var(--muted); }
 .legend-inline { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.blue { background: #4ea1ff; } .dot.orange { background: #f6774b; }

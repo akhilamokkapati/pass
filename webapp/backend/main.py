@@ -180,13 +180,14 @@ async def api_actuation_recommendation_respond(request: Request) -> dict:
 
 
 @app.post("/api/ai/summary")
-async def api_ai_summary() -> dict:
-    """Generates a plain-language progress summary + exercise suggestions
-    from the persisted sensor/actuation history via a real Gemini API call
-    (see ai_summary.py) - runs a coroutine's worth of blocking HTTP under the
-    hood, so it's offloaded to a thread rather than blocking the event loop
-    (and every other connected client's WebSocket tick) while it waits."""
-    return await asyncio.to_thread(ai_summary.generate_summary)
+async def api_ai_summary(force: bool = False) -> dict:
+    """Returns the cached plain-language progress summary + exercise
+    suggestions, regenerating via a real Gemini API call (see ai_summary.py)
+    only when needed: on first request, when `force` is set (the manual
+    button), or once the refresh window has elapsed and new data has arrived.
+    The blocking HTTP call is offloaded to a thread so it never stalls the
+    event loop (and every other client's WebSocket tick) while it waits."""
+    return await asyncio.to_thread(ai_summary.get_summary, force)
 
 
 @app.post("/api/sensors/snapshot")

@@ -1,11 +1,19 @@
 // Clinician-only: turns the persisted sensor/actuation history into a plain-
-// language progress summary + exercise suggestions via a real Gemini API
-// call (webapp/backend/ai_summary.py) - not a template, an actual LLM call,
-// on Google's free tier specifically so this doesn't bill per click. Still a
-// deliberate button click rather than something that fires automatically -
-// no reason to burn free-tier rate limit on requests nobody asked for.
+// language progress summary + exercise suggestions via a real Gemini API call
+// (webapp/backend/ai_summary.py) - not a template, an actual LLM call, on
+// Google's free tier. It loads on open and then refreshes itself, but the
+// backend gates the actual API call to at most once per refresh window and
+// only when new data has arrived (and shares one cached result across all
+// viewers), so this stays well within the free-tier quota. The button forces
+// an immediate refresh.
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+
+// How often the browser asks the backend for a possibly-updated summary. This
+// is cheap (the backend serves its cache and only calls Gemini when its own
+// refresh window has elapsed AND the data changed), so it can be much finer
+// than the backend's refresh window without costing extra API calls.
+const POLL_MS = 10 * 60 * 1000
 
 // Gemini replies in markdown (### headings, **bold**, --- dividers, numbered
 // lists). We render just that small subset ourselves rather than pull in a
@@ -66,43 +74,76 @@ function renderMarkdown(text) {
   return out
 }
 
-export default function AiSummaryCard({ onSummary }) {
-  const [state, setState] = useState('idle')   // idle | loading | done | error
-  const [text, setText] = useState('')
+function formatUpdated(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d)) return null
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
 
-  const generate = () => {
-    setState('loading')
-    fetch('/api/ai/summary', { method: 'POST' })
+export default function AiSummaryCard({ onSummary }) {
+  const [state, setState] = useState('loading')  // loading | refreshing | done | error
+  const [text, setText] = useState('')
+  const [updatedAt, setUpdatedAt] = useState(null)
+
+  // `force` true = the manual button (regenerate now); false = a background
+  // poll or the initial load, where the backend usually just returns its cache.
+  const load = (force) => {
+    setState((prev) => (prev === 'done' ? 'refreshing' : 'loading'))
+    fetch('/api/ai/summary' + (force ? '?force=true' : ''), { method: 'POST' })
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) { setText(data.error); setState('error'); return }
+        if (data.error) { failSoft(data.error); return }
         const summary = data.summary || 'No summary returned.'
         setText(summary)
+        setUpdatedAt(data.generatedAt || null)
         setState('done')
-        // Hand the generated summary up so the PDF report can include it.
+        // Hand the latest summary up so the PDF report can include it.
         onSummary?.(summary)
       })
-      .catch(() => { setText("Couldn't reach the server - try again."); setState('error') })
+      .catch(() => failSoft("Couldn't reach the server - try again."))
   }
+
+  // On failure keep any summary already on screen (a background poll that hits
+  // an error shouldn't wipe a good summary); only surface the error on the
+  // very first load when there's nothing to show. Uses functional updates so
+  // it's correct even from the stale-closure poll callback.
+  const failSoft = (msg) => {
+    setState((prev) => (prev === 'refreshing' ? 'done' : 'error'))
+    setText((prev) => prev || msg)
+  }
+
+  // Load on open, then poll for refreshes. The backend decides when to actually
+  // call Gemini, so polling costs nothing extra.
+  useEffect(() => {
+    load(false)
+    const id = setInterval(() => load(false), POLL_MS)
+    return () => clearInterval(id)
+  }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updated = formatUpdated(updatedAt)
 
   return (
     <section className="card accent-balance ai-summary-card">
       <div className="card-head">
         <h3>AI progress summary</h3>
-        <button className="btn download" onClick={generate} disabled={state === 'loading'}>
-          {state === 'loading' ? 'Generating…' : 'Generate AI summary'}
+        <button className="btn download" onClick={() => load(true)}
+          disabled={state === 'loading' || state === 'refreshing'}>
+          {state === 'loading' || state === 'refreshing' ? 'Generating…' : 'Generate AI summary'}
         </button>
       </div>
-      {state === 'idle' && (
-        <div className="cue">
-          Summarizes recent sensor and actuation-session history into plain language, with a
-          few exercise suggestions for next time. Click to generate - each click is a real
-          API call, not cached or automatic.
-        </div>
-      )}
       {state === 'loading' && <div className="cue">Reading recent history and asking Gemini…</div>}
       {state === 'error' && <div className="cal-msg">{text}</div>}
-      {state === 'done' && <div className="ai-summary-text">{renderMarkdown(text)}</div>}
+      {(state === 'done' || state === 'refreshing') && (
+        <>
+          <div className="ai-summary-text">{renderMarkdown(text)}</div>
+          <div className="cue ai-updated">
+            {state === 'refreshing'
+              ? 'Checking for updates…'
+              : `Updated ${updated || 'just now'} · refreshes automatically`}
+          </div>
+        </>
+      )}
     </section>
   )
 }

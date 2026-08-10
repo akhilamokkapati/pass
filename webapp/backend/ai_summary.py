@@ -24,14 +24,31 @@ key never gets committed. Never hardcode a key here.
 
 from __future__ import annotations
 
+import datetime
 import os
 import pathlib
+import threading
+import time
 
 from dotenv import load_dotenv
 
 from . import sensor_log, sessions
 
 load_dotenv(pathlib.Path(__file__).resolve().parent / ".env")
+
+# The summary refreshes itself at most this often, and only when the underlying
+# data has actually changed (see get_summary). Kept deliberately long because
+# Gemini's free tier is quota-limited (~250 requests/day, account-specific) -
+# at 2h that is at most ~12 calls/day even with the dashboard open all day, and
+# zero calls when no new sensor/actuation data has come in.
+REFRESH_INTERVAL_S = 2 * 3600
+
+# One cached result shared across every connected dashboard, so N open viewers
+# still cost at most one API call per refresh window rather than N. The lock
+# serialises regeneration so two near-simultaneous requests can't both fire a
+# call - the second waits, then finds the fresh cache.
+_lock = threading.Lock()
+_cache: dict = {"summary": None, "fingerprint": None, "generated_at": 0.0}
 
 MODEL = "gemini-flash-latest"   # Google-maintained alias, not a pinned version -
                                  # avoids this breaking again next time a specific
@@ -97,18 +114,16 @@ def _build_prompt(snapshots: list[dict], actuation: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def generate_summary() -> dict:
-    """Returns {"summary": str} on success, or {"error": str} if the API key
-    is missing, there's nothing to summarize yet, or the API call fails."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return {"error": "GEMINI_API_KEY is not set - see webapp/backend/.env.example"}
+def _fingerprint(snapshots: list[dict], actuation: list[dict]) -> str:
+    """A cheap signature of the current data, so we can tell whether anything
+    new has arrived since the last summary (both lists are most-recent-first)."""
+    def top(items: list[dict], key: str) -> str:
+        return f"{len(items)}:{items[0].get(key, '') if items else ''}"
+    return f"{top(snapshots, 'loggedAt')}|{top(actuation, 'endedAt')}"
 
-    snapshots = sensor_log.get_snapshots(limit=30)
-    actuation = sessions.get_sessions(limit=10)
-    if not snapshots and not actuation:
-        return {"error": "No session history logged yet - nothing to summarize."}
 
+def _call_model(api_key: str, snapshots: list[dict], actuation: list[dict]) -> dict:
+    """The actual Gemini call. Returns {"summary": str} or {"error": str}."""
     from google import genai  # lazy: only needed once a key is actually configured
     from google.genai import types
 
@@ -129,3 +144,56 @@ def generate_summary() -> dict:
     if not text:
         return {"error": "AI returned an empty response - try again."}
     return {"summary": _strip_dashes(text)}
+
+
+def _response(cached: bool, note: str | None = None) -> dict:
+    generated_at = (
+        datetime.datetime.fromtimestamp(_cache["generated_at"]).isoformat(timespec="seconds")
+        if _cache["generated_at"] else None
+    )
+    out = {
+        "summary": _cache["summary"],
+        "cached": cached,
+        "generatedAt": generated_at,
+        "refreshIntervalS": REFRESH_INTERVAL_S,
+    }
+    if note:
+        out["note"] = note
+    return out
+
+
+def get_summary(force: bool = False) -> dict:
+    """Returns a cached summary, regenerating via Gemini only when needed:
+    on first request, when `force` is set (manual button), or once the refresh
+    window has elapsed AND new data has arrived. Otherwise serves the cache and
+    makes no API call. Returns {"summary": str, ...} or {"error": str}."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return {"error": "GEMINI_API_KEY is not set - see webapp/backend/.env.example"}
+
+    snapshots = sensor_log.get_snapshots(limit=30)
+    actuation = sessions.get_sessions(limit=10)
+    if not snapshots and not actuation:
+        return {"error": "No session history logged yet - nothing to summarize."}
+
+    fingerprint = _fingerprint(snapshots, actuation)
+    now = time.time()
+
+    with _lock:
+        have_cache = _cache["summary"] is not None
+        window_elapsed = (now - _cache["generated_at"]) >= REFRESH_INTERVAL_S
+        data_changed = fingerprint != _cache["fingerprint"]
+        should_regenerate = force or (not have_cache) or (window_elapsed and data_changed)
+
+        if not should_regenerate:
+            return _response(cached=True)
+
+        result = _call_model(api_key, snapshots, actuation)
+        if "error" in result:
+            # Don't lose a good cached summary just because a refresh failed.
+            if have_cache:
+                return _response(cached=True, note="Refresh failed; showing the last summary.")
+            return result
+
+        _cache.update(summary=result["summary"], fingerprint=fingerprint, generated_at=now)
+        return _response(cached=False)
