@@ -3,19 +3,23 @@ PASS live dashboard - AI-generated progress summary + exercise suggestions.
 
 Reads the same persisted history the Logs and Session tabs already show
 (webapp/backend/sensor_log.py's periodic snapshots, webapp/backend/
-sessions.py's actuation session log) and asks Claude to turn it into a short
+sessions.py's actuation session log) and asks an LLM to turn it into a short
 plain-language summary for the therapist, plus a few concrete exercise
 suggestions - the two things a clinician actually wants out of a session
 review, instead of reading raw numbers off several tabs themselves.
 
-This is a genuine LLM call, not a template - it costs a small amount per
-request and needs an API key, so it only ever runs when the clinician
-explicitly clicks "Generate AI summary" (see the /api/ai/summary endpoint in
-main.py), never automatically or on a timer.
+This is a genuine LLM call, not a template - runs on Google's Gemini API
+specifically because its free tier is a real free tier (not just trial
+credits that expire), so this feature costs nothing per use rather than
+billing per click. It still only ever runs when the clinician explicitly
+clicks "Generate AI summary" (see the /api/ai/summary endpoint in main.py),
+never automatically or on a timer - no reason to burn free-tier rate limit
+on requests nobody asked for.
 
-Requires ANTHROPIC_API_KEY in the environment. Loaded from webapp/backend/.env
-if present (see .env.example in this folder) - that file is gitignored, so
-the key never gets committed. Never hardcode a key here.
+Requires GEMINI_API_KEY in the environment (get one free at
+https://aistudio.google.com/apikey). Loaded from webapp/backend/.env if
+present (see .env.example in this folder) - that file is gitignored, so the
+key never gets committed. Never hardcode a key here.
 """
 
 from __future__ import annotations
@@ -29,8 +33,8 @@ from . import sensor_log, sessions
 
 load_dotenv(pathlib.Path(__file__).resolve().parent / ".env")
 
-MODEL = "claude-sonnet-5"
-MAX_TOKENS = 700
+MODEL = "gemini-2.5-flash"
+MAX_OUTPUT_TOKENS = 700
 
 SYSTEM_PROMPT = (
     "You are assisting a physical therapist reviewing a patient's wearable "
@@ -77,26 +81,32 @@ def _build_prompt(snapshots: list[dict], actuation: list[dict]) -> str:
 def generate_summary() -> dict:
     """Returns {"summary": str} on success, or {"error": str} if the API key
     is missing, there's nothing to summarize yet, or the API call fails."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return {"error": "ANTHROPIC_API_KEY is not set - see webapp/backend/.env.example"}
+        return {"error": "GEMINI_API_KEY is not set - see webapp/backend/.env.example"}
 
     snapshots = sensor_log.get_snapshots(limit=30)
     actuation = sessions.get_sessions(limit=10)
     if not snapshots and not actuation:
         return {"error": "No session history logged yet - nothing to summarize."}
 
-    import anthropic  # lazy: only needed once a key is actually configured
+    from google import genai  # lazy: only needed once a key is actually configured
+    from google.genai import types
 
     prompt = _build_prompt(snapshots, actuation)
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
+        client = genai.Client(api_key=api_key)
+        resp = client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT, max_output_tokens=MAX_OUTPUT_TOKENS,
+            ),
         )
     except Exception as exc:  # network/API failure - surface it, don't crash the endpoint
         return {"error": f"AI request failed: {exc}"}
 
-    text = "".join(block.text for block in resp.content if block.type == "text")
+    text = (resp.text or "").strip()
+    if not text:
+        return {"error": "AI returned an empty response - try again."}
     return {"summary": text}

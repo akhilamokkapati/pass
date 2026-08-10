@@ -182,7 +182,7 @@ async def api_actuation_recommendation_respond(request: Request) -> dict:
 @app.post("/api/ai/summary")
 async def api_ai_summary() -> dict:
     """Generates a plain-language progress summary + exercise suggestions
-    from the persisted sensor/actuation history via a real Claude API call
+    from the persisted sensor/actuation history via a real Gemini API call
     (see ai_summary.py) - runs a coroutine's worth of blocking HTTP under the
     hood, so it's offloaded to a thread rather than blocking the event loop
     (and every other connected client's WebSocket tick) while it waits."""
