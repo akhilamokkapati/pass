@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { tiltDeg, qrelative, qaverage, qcanon, angleAboutAxisDeg, axisAngle } from './quat.js'
 
-// Widened from 1.5s: a two-hop wireless pipeline (board -> router -> laptop
-// -> relay -> Render -> browser) will drop the odd packet even when every
-// node in the chain is healthy. 1.5s flagged those as "offline" and flickered
-// the UI; 4s tolerates a few dropped packets/relay hiccups while still
-// catching a genuinely disconnected node within a few seconds.
-const STALE = 4
+// Widened from 1.5s, then again from 4s: a two-hop wireless pipeline (board
+// -> router -> laptop -> relay -> Render -> browser) will drop the odd
+// packet even when every node in the chain is healthy, and each board's own
+// zombie-WiFi guard (see e.g. knee_left.ino's ZOMBIE_CHECK_MS/ZOMBIE_LIMIT)
+// can force a brief reconnect cycle on a marginal signal - together these
+// produced multi-second gaps on a normally-healthy link that 4s still
+// flagged as "offline", flickering the whole UI every 5-10s on weak
+// signal. 8s comfortably absorbs one full zombie-guard reconnect cycle
+// (worst case ~9s: 3 checks x 3s before it forces WiFi.disconnect(), plus
+// rejoin time) while still catching a genuinely disconnected node quickly
+// enough for a live rehab dashboard.
+const STALE = 8
 export const fresh = (age) => age != null && age < STALE
 const CAL_BUF_MAX = 12       // ~0.5-0.6s of samples at 20Hz to average per capture
 const MIN_BEND_DEG = 15      // reject a calibration bend this small or smaller
