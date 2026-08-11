@@ -12,6 +12,7 @@ import ActuationFloatingWidget from './ActuationFloatingWidget.jsx'
 import { useActuationSession } from './useActuationSession.js'
 import SensorLogView from './SensorLogView.jsx'
 import CalibrateAllBar from './CalibrateAllBar.jsx'
+import AiSummaryCard from './AiSummaryCard.jsx'
 
 const KNEE_TARGET = 60
 const THEME_KEY = 'pass_theme'
@@ -153,7 +154,14 @@ export default function App() {
       {tab === 'home' && session.role !== 'clinician' && <PatientView m={m} kneeTarget={KNEE_TARGET} session={session} actions={actions} />}
       {tab === 'gait' && <GaitView m={m} />}
       {tab === 'session' && <ActuationPanel session={session} act={act} />}
-      {tab === 'logs' && <SensorLogView />}
+      {tab === 'logs' && (
+        <>
+          {/* Patient gets the plain-language AI summary alongside their history;
+              the clinician already has it on their home view. */}
+          {session.role !== 'clinician' && <AiSummaryCard />}
+          <SensorLogView />
+        </>
+      )}
 
       {tab !== 'session' && (
         <ActuationFloatingWidget act={act} session={session} onGoToSession={() => setTab('session')} />

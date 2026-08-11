@@ -1,5 +1,6 @@
-// Clinician-only: turns the persisted sensor/actuation history into a plain-
-// language progress summary + exercise suggestions via a real Gemini API call
+// Shown on the clinician home and on the patient's Logs tab: turns the
+// persisted sensor/actuation history into a plain-language progress summary
+// + exercise suggestions via a real Gemini API call
 // (webapp/backend/ai_summary.py) - not a template, an actual LLM call, on
 // Google's free tier. It loads on open and then refreshes itself, but the
 // backend gates the actual API call to at most once per refresh window and
