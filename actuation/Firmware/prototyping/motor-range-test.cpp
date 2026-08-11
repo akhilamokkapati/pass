@@ -5,7 +5,7 @@ int PWM = 255;
 const int AIN1 = D0;
 const int AIN2 = D1;
 
-/*void handleSerialInput() {
+void handleSerialInput() {
   if (!Serial.available()) return;
   char c = Serial.peek();
   if (c == '-' || c == '.' || (c >= '0' && c <= '9')) {
@@ -16,7 +16,6 @@ const int AIN2 = D1;
     Serial.read(); // discard unknown/whitespace characters
   }
 }
-  */
 
 void setup() {
     Serial.begin(115200);
@@ -28,11 +27,7 @@ void setup() {
 }
 
 void loop() {
-    //handleSerialInput();
+    handleSerialInput();
     ledcWrite(1, PWM);
     ledcWrite(2, 0);
-    delay(500);
-    ledcWrite(1, 0);
-    ledcWrite(2, PWM);
-    delay(500);
 }
