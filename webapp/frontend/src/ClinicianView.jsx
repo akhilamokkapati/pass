@@ -5,6 +5,7 @@ import { StatusPill } from './ui.jsx'
 import { downloadReport } from './report.js'
 import { downloadCSV } from './csv.js'
 import AiSummaryCard from './AiSummaryCard.jsx'
+import ProgressTrend from './ProgressTrend.jsx'
 
 function Stat({ label, value, unit }) {
   return (
@@ -64,6 +65,8 @@ export default function ClinicianView({ m, snap, feetZeroEpoch, actions }) {
       </div>
 
       <AiSummaryCard onSummary={setAiSummary} />
+
+      <ProgressTrend />
 
       <section className="card accent-knee">
         <div className="card-head"><h3>Left knee flexion</h3><StatusPill ok={kneeLOk} /></div>

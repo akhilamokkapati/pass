@@ -1,6 +1,7 @@
 import Ring from './Ring.jsx'
 import { StatusPill } from './ui.jsx'
 import { profileSummary } from './auth.js'
+import ProgressTrend from './ProgressTrend.jsx'
 
 function Head({ title, ok }) {
   return <div className="card-head"><h3>{title}</h3><StatusPill ok={ok} /></div>
@@ -176,6 +177,8 @@ export default function PatientView({ m, kneeTarget, session, actions }) {
         <SymmetryCard si={m?.symmetryIndexOverall} />
         <CadenceCard cadence={m?.cadence} />
       </div>
+
+      <ProgressTrend />
     </div>
   )
 }

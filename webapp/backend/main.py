@@ -227,6 +227,14 @@ async def api_sensors_snapshots(limit: int = 200) -> dict:
     return {"snapshots": sensor_log.get_snapshots(limit=limit)}
 
 
+@app.get("/api/sensors/trend")
+async def api_sensors_trend(days: int = 90) -> dict:
+    """Per-day rollup of the snapshot log (rehab score, peak flexion, symmetry)
+    with baseline/latest/delta per metric - powers the Progress-over-time card
+    so patient and clinician can see improvement or decline across sessions."""
+    return {"trend": sensor_log.get_trend(days=days)}
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()
