@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import TimeChart from './TimeChart.jsx'
 import FeetMap from './FeetMap.jsx'
 import { StatusPill } from './ui.jsx'
 import { downloadReport } from './report.js'
 import { downloadCSV } from './csv.js'
 import AiSummaryCard from './AiSummaryCard.jsx'
+import ProgressTrend from './ProgressTrend.jsx'
 
 function Stat({ label, value, unit }) {
   return (
@@ -29,6 +31,8 @@ function kneeSideStats(hist, key) {
 }
 
 export default function ClinicianView({ m, snap, feetZeroEpoch, actions }) {
+  // Latest AI summary (once the clinician generates one) so the PDF can embed it.
+  const [aiSummary, setAiSummary] = useState('')
   const hist = m?.hist || []
   const left = kneeSideStats(hist, 'kneeL')
   const right = kneeSideStats(hist, 'kneeR')
@@ -51,7 +55,7 @@ export default function ClinicianView({ m, snap, feetZeroEpoch, actions }) {
       <div className="clinician-head">
         <span className="clinician-title">Session detail</span>
         <div className="clinician-head-actions">
-          <button className="btn download" onClick={() => downloadReport(m)}>
+          <button className="btn download" onClick={() => downloadReport(m, aiSummary)}>
             <span className="dl-ico" /> Download report
           </button>
           <button className="btn ghost" onClick={() => downloadCSV(m)}>
@@ -60,7 +64,9 @@ export default function ClinicianView({ m, snap, feetZeroEpoch, actions }) {
         </div>
       </div>
 
-      <AiSummaryCard />
+      <AiSummaryCard onSummary={setAiSummary} />
+
+      <ProgressTrend />
 
       <section className="card accent-knee">
         <div className="card-head"><h3>Left knee flexion</h3><StatusPill ok={kneeLOk} /></div>

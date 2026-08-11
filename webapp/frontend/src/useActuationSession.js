@@ -56,6 +56,16 @@ const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
 // tension_n already reads on this same scale, not true SI Newtons.
 export const KG_OPTIONS = [1, 2, 3, 4, 5]
 
+// Client-side only for now - no exercise field exists in the sessions
+// database or the recommendation logic (sessions.py) yet, so this just
+// drives the Recommendation card's displayed copy. ptReps is a placeholder
+// stand-in for a real PT-entered value, not sourced from any clinician
+// input - swap this out once that exists.
+export const EXERCISES = [
+  { id: 'knee_extension', label: 'Knee extension', ptReps: 10 },
+  { id: 'hamstring_curl', label: 'Hamstring curl', ptReps: 8 },
+]
+
 export function useActuationSession(m) {
   const online = !!m?.actuationOk
   const tension = m?.actuationTension ?? 0
@@ -63,6 +73,7 @@ export function useActuationSession(m) {
   const rec = m?.actuationRecommendation ?? null
 
   const [level, setLevel] = useState(KG_OPTIONS[0])
+  const [exercise, setExercise] = useState(EXERCISES[0].id)
   const [phase, setPhase] = useState('idle') // idle | countdown | twisting | ready | exercising | summary
   const [countdown, setCountdown] = useState(COUNTDOWN_S)
   const [summary, setSummary] = useState(null)
@@ -159,6 +170,18 @@ export function useActuationSession(m) {
   const respondRecommendation = (approved) =>
     postJson('/api/actuation/recommendation/respond', { approved })
 
+  const [remarkText, setRemarkText] = useState('')
+  const [remarkStatus, setRemarkStatus] = useState(null) // null | 'saved'
+  const logRemark = async (sessionId) => {
+    const text = remarkText.trim()
+    if (!sessionId || !text) return
+    const res = await postJson('/api/actuation/session/remark', { sessionId, text })
+    if (res?.remark) {
+      setRemarkText('')
+      setRemarkStatus('saved')
+    }
+  }
+
   const jogStart = (cmd) => {
     sendCmd(cmd, 1)
     clearInterval(jogTimer.current)
@@ -197,9 +220,9 @@ export function useActuationSession(m) {
 
   return {
     online, tension, boardState, rec,
-    level, setLevel, phase, setPhase, countdown, summary, logRefreshKey,
+    level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
-    respondRecommendation, jogStart, jogStop,
+    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark, jogStart, jogStop,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   }
 }

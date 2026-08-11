@@ -27,17 +27,7 @@
  *     e.g. "actuation,set_force,10.0" or "actuation,twist,1". Logged over
  *     serial only for now - nothing acts on it yet.
  *
- * Requires AP/client isolation OFF on the router (confirmed working via a
- * throwaway test board before this file existed) - without that, the laptop
- * cannot reach this board at all, only the reverse.
- *
- * ROOT-CAUSE NOTE (found while bringing this file up): Serial.print/println
- * can BLOCK on the XIAO ESP32-S3's native USB-CDC if nothing has the port
- * open and actively reading - this stalled the whole loop() and, with it,
- * WiFi sends, even though udp.beginPacket()/endPacket() kept reporting
- * success. A board with a monitor attached never shows it; a board running
- * untethered (the real deployment case - no laptop watching) would. Every
- * Serial call below is guarded with `if (Serial)` so it can never block.
+
  */
 
 #include <WiFi.h>

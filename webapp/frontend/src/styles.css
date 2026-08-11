@@ -205,9 +205,9 @@ body {
 
 /* hip flexion: thigh + shin lift together at the hip, knee following with a
    natural slight bend (a marching motion, not a straight-leg raise) */
-.pose-hipFlex .pose-leg-hip { animation: pose-hip-lift 2.4s ease-in-out infinite; }
-.pose-hipFlex .pose-leg-hip .pose-leg-knee { animation: pose-knee-follow 2.4s ease-in-out infinite; }
-.pose-hipFlex .pose-thigh, .pose-hipFlex .pose-shin { stroke: var(--accent); }
+.pose-hipFlexL .pose-leg-hip, .pose-hipFlexR .pose-leg-hip { animation: pose-hip-lift 2.4s ease-in-out infinite; }
+.pose-hipFlexL .pose-leg-hip .pose-leg-knee, .pose-hipFlexR .pose-leg-hip .pose-leg-knee { animation: pose-knee-follow 2.4s ease-in-out infinite; }
+.pose-hipFlexL .pose-thigh, .pose-hipFlexL .pose-shin, .pose-hipFlexR .pose-thigh, .pose-hipFlexR .pose-shin { stroke: var(--accent); }
 @keyframes pose-hip-lift {
   0%, 100% { transform: rotate(0deg); }
   55% { transform: rotate(-55deg); }
@@ -216,6 +216,9 @@ body {
   0%, 100% { transform: rotate(0deg); }
   55% { transform: rotate(35deg); }
 }
+/* hipFlexR mirrors the whole figure, same trick as kneeR above, so the
+   animated leg (always drawn on the figure's left) reads as the RIGHT leg */
+.pose-fig.pose-hipFlexR { transform-box: view-box; transform-origin: 80px 95px; transform: scaleX(-1); }
 
 /* hip tilt: torso + arms lean right as one unit, legs stay planted */
 .pose-hipTilt .pose-upper { animation: pose-lean 2.2s ease-in-out infinite; }
@@ -264,7 +267,9 @@ body {
 .act-level span { color: var(--muted); font-size: 13px; font-weight: 600; }
 .act-level input[type="range"] { width: 100%; accent-color: #c77bf0; }
 .act-kg-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.act-kg-row-vertical { flex-direction: column; flex-wrap: nowrap; }
 .act-kg-btn { flex: 1 1 calc(33% - 8px); margin-top: 0; padding: 8px 6px; font-size: 13px; }
+.act-kg-row-vertical .act-kg-btn { flex: 1 1 auto; width: 100%; }
 .act-kg-btn.on { background: linear-gradient(90deg, #7b3fd6, #c77bf0); color: #fff; border-color: transparent; }
 .act-consistency { font-size: 13px; color: var(--muted); margin-top: 8px; font-weight: 600; }
 .act-consistency.good { color: #3ddc84; }
@@ -275,9 +280,30 @@ body {
 .act-summary-title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
 .act-summary-actions { display: flex; gap: 10px; margin-top: 10px; }
 .act-summary-actions .btn { margin-top: 0; flex: 1; }
+.act-rec-row { display: flex; justify-content: space-around; align-items: flex-start; width: 100%; gap: 12px; margin: 4px 0 10px; }
+.act-rec-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.act-remark { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 12px; }
+.act-remark-input {
+  width: 100%; min-height: 64px; resize: vertical; font: inherit;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text);
+}
+.act-remark-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .act-jog { display: flex; gap: 10px; width: 100%; }
 .act-jog .btn { flex: 1; margin-top: 4px; user-select: none; }
-.act-force-stop { grid-column: 1 / -1; font-weight: 700; letter-spacing: .3px; }
+
+/* Shared big circular stop button - used by both the Session card's
+   in-exercise Stop and Manual Control's Force Stop, so the two read as the
+   same "hit this to stop the motor" action regardless of context. */
+.stop-circle {
+  width: 96px; height: 96px; border-radius: 50%; border: 0;
+  display: flex; align-items: center; justify-content: center;
+  margin: 10px auto 0; padding: 0;
+  font-weight: 700; font-size: 14px; letter-spacing: .3px;
+  color: #fff; background: var(--danger); cursor: pointer;
+}
+.stop-circle:hover { background: var(--danger-hover); }
+.stop-circle:active { background: var(--danger-active); }
 
 /* ---- logs tab ---- */
 .log-card .card-head { margin-bottom: 14px; }
@@ -325,7 +351,17 @@ body {
 .clinician-title { color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
 
 .ai-summary-card .card-head .btn { margin-top: 0; }
-.ai-summary-text { white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: var(--text); }
+.ai-summary-text { line-height: 1.6; font-size: 14px; color: var(--text); }
+.ai-summary-text .ai-h { margin: 18px 0 6px; font-size: 15px; font-weight: 700; color: var(--text); }
+.ai-summary-text .ai-h:first-child { margin-top: 0; }
+.ai-summary-text .ai-p { margin: 0 0 10px; }
+.ai-summary-text .ai-li { margin: 0 0 10px; padding-left: 22px; text-indent: -22px; }
+.ai-summary-text .ai-li-num { font-weight: 700; color: var(--text); }
+.ai-summary-text .ai-bullet { margin: 0 0 6px; padding-left: 34px; text-indent: -14px; }
+.ai-summary-text .ai-bullet-dot { color: var(--muted); }
+.ai-summary-text .ai-hr { border: 0; border-top: 1px solid var(--line, rgba(120,130,150,.25)); margin: 14px 0; }
+.ai-summary-text strong { font-weight: 700; color: var(--text); }
+.ai-updated { margin-top: 10px; font-size: 12px; color: var(--muted); }
 .legend-inline { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.blue { background: #4ea1ff; } .dot.orange { background: #f6774b; }
@@ -404,3 +440,28 @@ body {
 .act-float .cue { margin-top: 0; margin-bottom: 8px; font-size: 12px; }
 .act-float-actions { display: flex; gap: 8px; }
 .act-float-actions .btn { margin-top: 0; flex: 1; padding: 7px 10px; font-size: 12px; }
+
+/* Progress-over-time card (ProgressTrend.jsx) */
+.progress-trend .trend-intro { color: var(--muted); font-size: 13px; margin: 2px 0 14px; line-height: 1.45; }
+.trend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 900px) { .trend-grid { grid-template-columns: 1fr; } }
+.trend-row { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.trend-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.trend-name { color: var(--muted); font-size: 13px; font-weight: 600; }
+.trend-now { font-size: 26px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.trend-now i { font-size: 13px; font-weight: 600; color: var(--muted); font-style: normal; margin-left: 2px; }
+.trend-spark { width: 100%; height: 46px; display: block; }
+.trend-spark.empty { border-bottom: 1px dashed var(--line); }
+.trend-spark-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.trend-spark-area { fill: var(--accent); opacity: .12; stroke: none; }
+.trend-spark-dot { fill: var(--accent); }
+.trend-row-bot { display: flex; flex-direction: column; gap: 6px; }
+.trend-pill { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.trend-pill em { font-style: normal; font-weight: 600; opacity: .8; }
+.trend-pill.up { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-border); }
+.trend-pill.down { color: var(--danger); background: var(--warn-bg); border-color: var(--warn-border); }
+.trend-pill.flat { color: var(--muted); background: var(--surface-2); }
+.trend-base { font-size: 12px; color: var(--muted); }
+.trend-base b { font-weight: 700; }
+.trend-base b.up { color: var(--ok); }
+.trend-base b.down { color: var(--danger); }

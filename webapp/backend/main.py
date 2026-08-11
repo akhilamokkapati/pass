@@ -165,6 +165,23 @@ async def api_actuation_session_latest() -> dict:
     return {"session": sessions.get_latest_session_with_samples()}
 
 
+@app.post("/api/actuation/session/remark")
+async def api_actuation_session_remark(request: Request) -> dict:
+    """Clinician logs a remark against a specific session (the Recommendation
+    card - see sessions.add_remark)."""
+    body = await request.json()
+    session_id = body.get("sessionId")
+    text = (body.get("text") or "").strip()
+    if not session_id or not text:
+        raise HTTPException(status_code=400, detail="missing sessionId or text")
+    return {"remark": sessions.add_remark(int(session_id), text)}
+
+
+@app.get("/api/actuation/session/{session_id}/remarks")
+async def api_actuation_session_remarks(session_id: int) -> dict:
+    return {"remarks": sessions.get_remarks(session_id)}
+
+
 @app.post("/api/actuation/recommendation/respond")
 async def api_actuation_recommendation_respond(request: Request) -> dict:
     """Clinician approves or rejects the pending recommendation. The result
@@ -180,13 +197,14 @@ async def api_actuation_recommendation_respond(request: Request) -> dict:
 
 
 @app.post("/api/ai/summary")
-async def api_ai_summary() -> dict:
-    """Generates a plain-language progress summary + exercise suggestions
-    from the persisted sensor/actuation history via a real Gemini API call
-    (see ai_summary.py) - runs a coroutine's worth of blocking HTTP under the
-    hood, so it's offloaded to a thread rather than blocking the event loop
-    (and every other connected client's WebSocket tick) while it waits."""
-    return await asyncio.to_thread(ai_summary.generate_summary)
+async def api_ai_summary(force: bool = False) -> dict:
+    """Returns the cached plain-language progress summary + exercise
+    suggestions, regenerating via a real Gemini API call (see ai_summary.py)
+    only when needed: on first request, when `force` is set (the manual
+    button), or once the refresh window has elapsed and new data has arrived.
+    The blocking HTTP call is offloaded to a thread so it never stalls the
+    event loop (and every other client's WebSocket tick) while it waits."""
+    return await asyncio.to_thread(ai_summary.get_summary, force)
 
 
 @app.post("/api/sensors/snapshot")
@@ -207,6 +225,14 @@ async def api_sensors_snapshot(request: Request) -> dict:
 @app.get("/api/sensors/snapshots")
 async def api_sensors_snapshots(limit: int = 200) -> dict:
     return {"snapshots": sensor_log.get_snapshots(limit=limit)}
+
+
+@app.get("/api/sensors/trend")
+async def api_sensors_trend(days: int = 90) -> dict:
+    """Per-day rollup of the snapshot log (rehab score, peak flexion, symmetry)
+    with baseline/latest/delta per metric - powers the Progress-over-time card
+    so patient and clinician can see improvement or decline across sessions."""
+    return {"trend": sensor_log.get_trend(days=days)}
 
 
 @app.websocket("/ws")

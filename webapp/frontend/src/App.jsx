@@ -58,13 +58,13 @@ export default function App() {
   // title from first load. Falls back to that same default pre-login, where
   // there's no tab to name yet.
   useEffect(() => {
-    if (!session) { document.title = 'PASS - Live'; return }
+    if (!session) { document.title = 'RUNMO - Live'; return }
     const label = tab === 'home' ? (session.role === 'clinician' ? 'Clinician' : 'Patient')
       : tab === 'gait' ? 'Gait'
       : tab === 'session' ? 'Session'
       : tab === 'logs' ? 'Logs'
       : 'Live'
-    document.title = `PASS - ${label}`
+    document.title = `RUNMO - ${label}`
   }, [tab, session])
 
   // Periodic sensor snapshot log (webapp/backend/sensor_log.py), shown on the
@@ -109,8 +109,8 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="logo">PASS</span>
-          <span className="tagline">Patient Assessment Sensing System</span>
+          <span className="logo">RUNMO</span>
+          <span className="tagline">Helping you run-more</span>
         </div>
         <div className="top-right">
           <div className="modeswitch">
@@ -126,7 +126,7 @@ export default function App() {
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
           <div className={`conn ${connected ? 'on' : 'off'}`}
-            title="Link between this page and the PASS server (not the sensors)">
+            title="Link between this page and the RUNMO server (not the sensors)">
             {connected ? 'server online' : 'server offline'}
           </div>
           <div className="user-chip">
@@ -137,7 +137,7 @@ export default function App() {
         </div>
       </header>
 
-      <DevicesPanel snap={snap} />
+      {session.role !== 'clinician' && <DevicesPanel snap={snap} />}
 
       {!anyLive ? (
         <div className="empty">
@@ -146,7 +146,7 @@ export default function App() {
             30.007 network and live data appears here automatically.</div>
         </div>
       ) : (
-        <CalibrateAllBar m={m} actions={actions} />
+        session.role !== 'clinician' && <CalibrateAllBar m={m} actions={actions} />
       )}
 
       {tab === 'home' && session.role === 'clinician' && <ClinicianView m={m} snap={snap} feetZeroEpoch={feetZeroEpoch} actions={actions} />}

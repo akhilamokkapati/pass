@@ -32,11 +32,11 @@
 import { StatusPill } from './ui.jsx'
 import TimeChart from './TimeChart.jsx'
 import ActuationLogCard from './ActuationLogCard.jsx'
-import { KG_OPTIONS } from './useActuationSession.js'
+import { KG_OPTIONS, EXERCISES } from './useActuationSession.js'
 
 function downloadSummary(summary) {
   const lines = [
-    'PASS actuation session report',
+    'RUNMO actuation session report',
     new Date().toString(),
     `Target level: ${summary.target} kg`,
     `Duration: ${summary.durationS.toFixed(1)} s`,
@@ -48,7 +48,7 @@ function downloadSummary(summary) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `PASS-actuation-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`
+  a.download = `RUNMO-actuation-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`
   document.body.appendChild(a)
   a.click()
   a.remove()
@@ -58,24 +58,27 @@ function downloadSummary(summary) {
 export default function ActuationPanel({ session, act }) {
   const isClinician = session?.role === 'clinician'
   const {
-    online, tension, boardState, rec,
-    level, setLevel, phase, setPhase, countdown, summary, logRefreshKey,
+    online, tension, rec,
+    level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
-    respondRecommendation, jogStart, jogStop,
+    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark, jogStart, jogStop,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   } = act
+  const selectedExercise = EXERCISES.find((ex) => ex.id === exercise)
 
   return (
     <div className="grid actuation">
       <div className={`card center accent-actuation ${online ? '' : 'off'}`}>
-        <div className="card-head"><h3>Actuation</h3><StatusPill ok={online} /></div>
-        <div className="act-tension">{online ? tension.toFixed(1) : '--'}<span> kg</span></div>
-        <div className="cue">{online ? `board state: ${boardState}` : 'Waiting for board'}</div>
-        {hasTarget && (
+        <div className="card-head"><h3>Session Data</h3><StatusPill ok={online} /></div>
+        <div className="act-tension">{online && hasTarget ? tension.toFixed(1) : '--'}<span> kg</span></div>
+        {hasTarget ? (
           <div className={`act-consistency ${Math.abs(deltaPct) <= 5 ? 'good' : ''}`}>
             Target {target} kg · Actual {tension.toFixed(1)} kg · Δ {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%
           </div>
+        ) : (
+          <div className="cue">No active session</div>
         )}
+        <div className="cue">Force Monitoring</div>
         <TimeChart data={comparisonData}
           series={[{ key: 'curTension', color: '#c77bf0' }, { key: 'prevTension', color: '#4ea1ff' }]}
           unit=" kg" windowS={comparisonWindowS} />
@@ -95,13 +98,24 @@ export default function ActuationPanel({ session, act }) {
         </div>
       ) : (
         <div className="card center accent-actuation act-session">
-          <div className="card-head"><h3>Session</h3></div>
+          <div className="card-head"><h3>Resistive Training</h3></div>
 
           {phase === 'idle' && (
             <>
               <label className="act-level">
-                <span>Force level: {level} kg</span>
+                <span>Exercise</span>
                 <div className="act-kg-row">
+                  {EXERCISES.map((ex) => (
+                    <button key={ex.id} type="button" className={`btn ghost act-kg-btn ${exercise === ex.id ? 'on' : ''}`}
+                      onClick={() => setExercise(ex.id)}>
+                      {ex.label}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="act-level">
+                <span>Force level: {level} kg</span>
+                <div className="act-kg-row act-kg-row-vertical">
                   {KG_OPTIONS.map((kg) => (
                     <button key={kg} type="button" className={`btn ghost act-kg-btn ${level === kg ? 'on' : ''}`}
                       onClick={() => setLevel(kg)}>
@@ -131,7 +145,7 @@ export default function ActuationPanel({ session, act }) {
 
           {phase === 'twisting' && (
             <>
-              <div className="cue">Twisting to {level} kg…</div>
+              <div className="cue">Setting up…</div>
               <div className="act-tension small">{tension.toFixed(1)} / {level} kg</div>
               <button className="btn ghost" onClick={markReady}>Mark ready</button>
             </>
@@ -139,7 +153,7 @@ export default function ActuationPanel({ session, act }) {
 
           {phase === 'ready' && (
             <>
-              <div className="cue good">Ready - twisted to target</div>
+              <div className="cue good">Ready</div>
               <button className="btn download" onClick={beginExercise}>Begin exercise</button>
             </>
           )}
@@ -147,8 +161,8 @@ export default function ActuationPanel({ session, act }) {
           {phase === 'exercising' && (
             <>
               <div className="cue good">Exercise in progress</div>
-              <div className="act-tension small">{tension.toFixed(1)} kg</div>
-              <button className="btn ghost" onClick={stopSession}>Stop</button>
+              <div className="act-tension small">{target} kg</div>
+              <button className="stop-circle" onClick={stopSession}>Stop</button>
             </>
           )}
 
@@ -170,8 +184,18 @@ export default function ActuationPanel({ session, act }) {
 
       {rec && (
         <div className="card center accent-actuation act-recommendation">
-          <div className="card-head"><h3>Next-weight recommendation</h3></div>
-          <div className="act-tension small">{rec.kg} kg</div>
+          <div className="card-head"><h3>System Recommendation</h3></div>
+          <div className="cue">For your next session:</div>
+          <div className="act-rec-row">
+            <div className="act-rec-col">
+              <div className="cue">{selectedExercise?.label}</div>
+              <div className="act-tension small">{rec.kg} kg</div>
+            </div>
+            <div className="act-rec-col">
+              <div className="cue">Reps</div>
+              <div className="act-tension small">{selectedExercise?.ptReps}</div>
+            </div>
+          </div>
           <div className="cue">{rec.reason}</div>
           {isClinician && rec.status === 'pending' && (
             <div className="act-summary-actions">
@@ -187,6 +211,23 @@ export default function ActuationPanel({ session, act }) {
           )}
           {!isClinician && rec.status === 'pending' && (
             <div className="cue">Waiting for your therapist to review this</div>
+          )}
+          {!isClinician && rec.status === 'approved' && (
+            <span className="pill live"><i className="pill-dot" />Approved by your therapist</span>
+          )}
+          {isClinician && (
+            <div className="act-remark">
+              <textarea
+                className="act-remark-input"
+                placeholder="Add a remark about this session…"
+                value={remarkText}
+                onChange={(e) => setRemarkText(e.target.value)}
+              />
+              <button className="btn ghost" onClick={() => logRemark(rec.basedOnSessionId)} disabled={!remarkText.trim()}>
+                Log remark
+              </button>
+              {remarkStatus === 'saved' && <div className="cue good">Remark logged</div>}
+            </div>
           )}
         </div>
       )}
@@ -207,11 +248,8 @@ export default function ActuationPanel({ session, act }) {
             </button>
           </div>
           <div className="cue">Press and hold</div>
+          <button className="stop-circle" onClick={forceStop}>Force stop</button>
         </div>
-      )}
-
-      {!isClinician && (
-        <button className="btn ghost act-force-stop" onClick={forceStop}>Force stop</button>
       )}
 
       <ActuationLogCard refreshKey={logRefreshKey} />
