@@ -50,7 +50,6 @@ const JOG_REPEAT_MS = 150
 // index * this constant approximates each sample's elapsed time within its
 // session. Good enough for a comparison chart; not a precision timing claim.
 const SAMPLE_DT_S = 0.05
-const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
 const KG_TO_N = 9.81
 // Assessment mode: fixed 1kg load, motor braked in place once reached - see
 // ASSESSMENT_LOAD_N in angle_pid_wifi_test.cpp (must match).
@@ -131,12 +130,18 @@ export function useActuationSession(m) {
     return () => clearTimeout(t)
   }, [phase, countdown, level, exercise])
 
+  // "Ready" now tracks the firmware's own state, not a tension threshold -
+  // the motor only calibrates to the fixed 5N pretension and HALTS
+  // (angle_pid_wifi_test.cpp's remoteStartExercise/serviceRemoteFlows) until
+  // "Begin exercise" is clicked, so tension never approaches the real
+  // target during "twisting" anymore; boardState hitting "await_force" is
+  // the actual ground truth for "calibration finished, waiting on the user".
   useEffect(() => {
     if (phase !== 'twisting') return
-    if (online && tension >= sessionRef.current.target * READY_MARGIN && sessionRef.current.target > 0) {
+    if (online && boardState === 'await_force') {
       setPhase('ready')
     }
-  }, [phase, online, tension])
+  }, [phase, online, boardState])
 
   useEffect(() => {
     if (phase !== 'exercising') return
@@ -155,6 +160,7 @@ export function useActuationSession(m) {
   const markReady = () => setPhase('ready')
 
   const beginExercise = () => {
+    sendCmd('begin_exercise', 0)
     sessionRef.current.startedAt = Date.now()
     sessionRef.current.samples = []
     repsBaselineRef.current = totalReps
@@ -225,10 +231,12 @@ export function useActuationSession(m) {
   // testing, not tied to an exercise), but its highlighted/default motor
   // tracks whichever exercise was picked/run last, so it starts pointed at
   // the right motor instead of always defaulting to A. Still overridable by
-  // clicking the other button directly. Sends select_motor immediately on
-  // pick so the firmware has a target before the first jog press - see
-  // remoteJog() in angle_pid_wifi_test.cpp (only jogs while state ==
-  // SELECT_MODE, which select_motor puts it in).
+  // clicking the other button directly. This effect (and the initial
+  // useState default below) only update local UI state, not the board -
+  // clicking a motor button sends select_motor immediately via
+  // selectManualMotor(), but the default/synced motor does NOT until a jog
+  // button is actually pressed (jogStart sends it then - see below), so the
+  // board's `active` motor can lag what's highlighted here until first use.
   const [manualMotor, setManualMotorState] = useState(EXERCISES[0].motorIndex)
   useEffect(() => {
     const motorIndex = EXERCISES.find((ex) => ex.id === exercise)?.motorIndex
@@ -240,6 +248,13 @@ export function useActuationSession(m) {
   }
 
   const jogStart = (cmd) => {
+    // manualMotor's default/exercise-synced value only ever updates local
+    // state (see the effect above) - the board's `active` motor stays
+    // whatever select_motor last set it to (or nullptr before any click),
+    // so remoteJog() no-ops until a real select_motor arrives. Resending it
+    // here on every jog press keeps the board in sync with what's shown
+    // without relying on the user having clicked a motor button first.
+    sendCmd('select_motor', manualMotor)
     sendCmd(cmd, 1)
     clearInterval(jogTimer.current)
     jogTimer.current = setInterval(() => sendCmd(cmd, 1), JOG_REPEAT_MS)

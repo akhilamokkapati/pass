@@ -17,10 +17,13 @@
  *   EXERCISE mode (webapp: Start session) - one motor, continuous force
  *   hold, patient moves against it:
  *     select_motor(A/B) -> pretension fixed at EXERCISE_PRETENSION_N (5N,
- *     per instruction - no longer typed) -> auto-calibrate -> once
- *     calibration hands off to AWAIT_FORCE, the webapp's training-weight
- *     value (already converted kg->N) is applied automatically, same as
- *     typing it at that prompt would do -> FORCE_CONTROL.
+ *     per instruction - no longer typed) -> auto-calibrate -> calibration
+ *     hands off to AWAIT_FORCE and HALTS there (the motor genuinely sits
+ *     still - this is the webapp's "Ready" phase) -> webapp's "Begin
+ *     exercise" button sends begin_exercise, which applies the queued
+ *     training-weight value (already kg->N converted) -> FORCE_CONTROL.
+ *     Deliberately two steps, not auto-chained, so the patient confirms
+ *     before the real load engages.
  *
  *   ASSESSMENT mode (webapp: Start Assessment, gated by a clinician
  *     toggle) - both motors in sequence, force+brake, fixed 1kg (9.81N)
@@ -32,10 +35,9 @@
  * tension_n's slot; state string now also reports which of the two remote
  * flows above is running (see stateName()), not just the raw serial state
  * machine enum.
- * Commands in (UDP :5008): select_motor, start_exercise, start_assessment,
- * stop - see handleWifiCommands()/dispatchWifiCommand() below. Manual jog
- * (twist/untwist) is intentionally NOT mapped yet - out of scope for this
- * pass, only exercise + assessment were asked for.
+ * Commands in (UDP :5008): select_motor, start_exercise, begin_exercise,
+ * start_assessment, twist/untwist (manual jog), jog_stop, stop - see
+ * handleWifiCommands() below.
  */
 
 #include <Arduino.h>
@@ -575,18 +577,27 @@ unsigned long lastPrintMs = 0;
 const unsigned long PRINT_INTERVAL_MS = 100;
 
 void printStatusIfDue() {
-  bool printable = (state == ANGLE_CONTROL || state == FORCE_BRAKE_MOVE || state == FORCE_BRAKE_HOLD);
+  // FORCE_CONTROL included so exercise mode (the webapp's continuous
+  // force-hold state) actually streams data - it runs the same
+  // updateForce->calculateForcePID->calculatePID cascade as the other
+  // printable states but was previously left out of this gate entirely.
+  bool printable = (state == ANGLE_CONTROL || state == FORCE_CONTROL || state == FORCE_BRAKE_MOVE || state == FORCE_BRAKE_HOLD);
   if (!printable || active == nullptr) return;
   unsigned long now = millis();
   if (now - lastPrintMs < PRINT_INTERVAL_MS) return;
   lastPrintMs = now;
 
   // One line, one println - Teleplot/Serial Plotter need it that way.
-  Serial.print(F(">setpoint:"));   Serial.print(active->setpoint);
-  Serial.print(F(",measured:"));   Serial.print(active->position);
-  Serial.print(F(",error:"));      Serial.print(active->setpoint - active->position);
-  Serial.print(F(",control:"));    Serial.print(active->controlSignal);
-  Serial.print(F(",Force/N:"));    Serial.print(active->force);
+  // setpoint/measured/error are the INNER angle loop (counts) - in
+  // FORCE_CONTROL, setpoint is calculateForcePID()'s derived target, not
+  // the tension target itself, so forceSetpoint/Force-N are printed
+  // alongside it to see the outer loop's target vs. actual.
+  Serial.print(F(">setpoint:"));      Serial.print(active->setpoint);
+  Serial.print(F(",measured:"));      Serial.print(active->position);
+  Serial.print(F(",error:"));         Serial.print(active->setpoint - active->position);
+  Serial.print(F(",control:"));       Serial.print(active->controlSignal);
+  Serial.print(F(",forceSetpoint:")); Serial.print(active->forceSetpoint);
+  Serial.print(F(",Force/N:"));       Serial.print(active->force);
   Serial.println();
 
 }
@@ -719,10 +730,15 @@ void remoteJogStop() {
   setMotor(*active, 0);
 }
 
-// Exercise mode: pretension fixed at EXERCISE_PRETENSION_N, then the
-// webapp's training-weight value (forceN, already kg->N converted) is
-// queued to auto-apply the moment calibration reaches AWAIT_FORCE - see
-// serviceRemoteFlows() - same as a user typing it there.
+// Exercise mode: pretension fixed at EXERCISE_PRETENSION_N. Calibration
+// halts the motor on its own once it reaches AWAIT_FORCE (the main code's
+// own runOppointCalibration() already calls setMotor(m, 0) there - nothing
+// extra needed for that part). The webapp's training-weight value is just
+// queued here, NOT auto-applied - it only takes effect once
+// remoteBeginExercise() is explicitly triggered by the "Begin exercise"
+// button, so the motor genuinely sits still at pretension ("Ready") until
+// the patient confirms, instead of sliding straight into the real target
+// the instant calibration finishes.
 void remoteStartExercise(float forceN) {
   if (active == nullptr) return;   // select_motor must arrive first
   brakeModeSelected = false;
@@ -732,6 +748,19 @@ void remoteStartExercise(float forceN) {
   startOppointCalibration(*active);
   state = OPPOINT_CALIBRATION;
   if (Serial) Serial.println("# remote start exercise");
+}
+
+// "Begin exercise" button - applies the queued training-weight target and
+// starts the continuous force hold. Only does anything if calibration has
+// actually finished and is sitting at AWAIT_FORCE waiting; otherwise it's
+// pressed too early (or nothing is queued) and is a no-op.
+void remoteBeginExercise() {
+  if (!pendingForceTargetValid || state != AWAIT_FORCE || active == nullptr) return;
+  active->forceSetpoint = pendingForceTargetN;
+  resetPID(*active);
+  state = FORCE_CONTROL;
+  pendingForceTargetValid = false;
+  if (Serial) Serial.println("# remote begin exercise, force target applied");
 }
 
 // Assessment mode: motor A first, force+brake at the fixed load.
@@ -747,18 +776,11 @@ void remoteStartAssessment() {
   if (Serial) Serial.println("# remote start assessment");
 }
 
-// Polled every loop() pass - advances the two remote flows above once the
+// Polled every loop() pass - advances the assessment flow once the
 // underlying state machine reaches the point a typed Serial command would
-// have driven it further (calibration finishing, brake settling).
+// have driven it further (brake settling). Exercise mode's AWAIT_FORCE step
+// is NOT auto-advanced here on purpose - see remoteBeginExercise().
 void serviceRemoteFlows() {
-  if (pendingForceTargetValid && state == AWAIT_FORCE && active != nullptr) {
-    active->forceSetpoint = pendingForceTargetN;
-    resetPID(*active);
-    state = FORCE_CONTROL;
-    pendingForceTargetValid = false;
-    if (Serial) Serial.println("# remote force target applied, exercise running");
-  }
-
   if (assessmentStep == ASSESS_MOTOR_A && state == FORCE_BRAKE_HOLD) {
     if (assessmentHoldStart == 0) assessmentHoldStart = millis();
     if (millis() - assessmentHoldStart >= ASSESSMENT_HOLD_MS) {
@@ -829,6 +851,8 @@ void handleWifiCommands() {
     remoteSelectMotor((int)value);
   } else if (strcmp(cmd, "start_exercise") == 0) {
     remoteStartExercise(value);
+  } else if (strcmp(cmd, "begin_exercise") == 0) {
+    remoteBeginExercise();
   } else if (strcmp(cmd, "start_assessment") == 0) {
     remoteStartAssessment();
   } else if (strcmp(cmd, "twist") == 0) {
