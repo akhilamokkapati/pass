@@ -73,12 +73,12 @@ def _handle_line(kind: str, line: str) -> None:
                 STATE["actuation"]["batt"] = float(parts[5])
             _mark("actuation")
         elif kind == "feet" and parts[0] in ("foot_left", "foot_right") and len(parts) >= 19:
-            # The physical insoles got swapped onto the opposite feet, so the
-            # "foot_left"/"foot_right" unit_id each board's firmware sends no
-            # longer matches which foot it's actually worn on - flip it here
-            # (one place) rather than re-flashing both boards or touching the
+            # Map each foot board to the dashboard side matching its firmware
+            # unit_id. If the boards ever end up physically worn on the opposite
+            # feet, flip this one line (swap the "left"/"right") to correct the
+            # display here rather than re-flashing both boards or touching the
             # frontend, which has no idea a swap happened.
-            side = "right" if parts[0] == "foot_left" else "left"
+            side = "left" if parts[0] == "foot_left" else "right"
             STATE["feet"][side]["t_ms"] = int(float(parts[2]))
             STATE["feet"][side]["c"] = [int(float(v)) for v in parts[3:19]]
             if len(parts) >= 20:
