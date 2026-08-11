@@ -58,23 +58,32 @@ function downloadSummary(summary) {
 export default function ActuationPanel({ session, act }) {
   const isClinician = session?.role === 'clinician'
   const {
-    online, tension, rec,
+    online, tension, boardState, rec,
     level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
-    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark, jogStart, jogStop,
+    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark,
+    manualMotor, selectManualMotor, jogStart, jogStop,
+    assessmentEnabled, assessmentActive, setAssessmentEnabled, startAssessment,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   } = act
   const selectedExercise = EXERCISES.find((ex) => ex.id === exercise)
+  const assessmentLabel = {
+    assessing_knee_extension: 'Assessing knee extension…',
+    assessing_curl: 'Assessing hamstring curl…',
+    assessment_done: 'Assessment complete',
+  }[boardState] || null
 
   return (
     <div className="grid actuation">
       <div className={`card center accent-actuation ${online ? '' : 'off'}`}>
         <div className="card-head"><h3>Session Data</h3><StatusPill ok={online} /></div>
-        <div className="act-tension">{online && hasTarget ? tension.toFixed(1) : '--'}<span> kg</span></div>
+        <div className="act-tension">{online && (hasTarget || assessmentActive) ? tension.toFixed(1) : '--'}<span> kg</span></div>
         {hasTarget ? (
           <div className={`act-consistency ${Math.abs(deltaPct) <= 5 ? 'good' : ''}`}>
             Target {target} kg · Actual {tension.toFixed(1)} kg · Δ {deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%
           </div>
+        ) : assessmentActive ? (
+          <div className="cue good">{assessmentLabel}</div>
         ) : (
           <div className="cue">No active session</div>
         )}
@@ -160,6 +169,7 @@ export default function ActuationPanel({ session, act }) {
 
           {phase === 'exercising' && (
             <>
+              <div className="act-exercise-title">{selectedExercise?.label}</div>
               <div className="cue good">Exercise in progress</div>
               <div className="act-tension small">{target} kg</div>
               <button className="stop-circle" onClick={stopSession}>Stop</button>
@@ -229,12 +239,39 @@ export default function ActuationPanel({ session, act }) {
               {remarkStatus === 'saved' && <div className="cue good">Remark logged</div>}
             </div>
           )}
+          {isClinician && (
+            <div className="act-remark">
+              <button className="btn ghost" onClick={() => setAssessmentEnabled(!assessmentEnabled)}>
+                {assessmentEnabled ? 'Disable assessment' : 'Instruct patient to assess'}
+              </button>
+              {assessmentEnabled && <div className="cue good">Assessment offered to patient</div>}
+            </div>
+          )}
+          {!isClinician && assessmentEnabled && phase === 'idle' && (
+            <div className="act-remark">
+              <button className="btn download" onClick={startAssessment} disabled={!online || assessmentActive}>
+                Start Assessment
+              </button>
+              {assessmentLabel && <div className="cue good">{assessmentLabel}</div>}
+            </div>
+          )}
         </div>
       )}
 
       {!isClinician && (
         <div className="card center accent-actuation">
           <div className="card-head"><h3>Manual control</h3></div>
+          <label className="act-level">
+            <span>Motor</span>
+            <div className="act-kg-row">
+              {EXERCISES.map((ex) => (
+                <button key={ex.id} type="button" className={`btn ghost act-kg-btn ${manualMotor === ex.motorIndex ? 'on' : ''}`}
+                  onClick={() => selectManualMotor(ex.motorIndex)}>
+                  Motor {ex.motorIndex === 0 ? 'A' : 'B'}
+                </button>
+              ))}
+            </div>
+          </label>
           <div className="act-jog">
             <button className="btn ghost"
               onMouseDown={() => jogStart('twist')} onMouseUp={jogStop} onMouseLeave={jogStop}

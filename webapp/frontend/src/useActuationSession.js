@@ -51,26 +51,39 @@ const JOG_REPEAT_MS = 150
 // session. Good enough for a comparison chart; not a precision timing claim.
 const SAMPLE_DT_S = 0.05
 const READY_MARGIN = 0.95   // fraction of target tension counted as "reached"
-// Preset force-level buttons (kg) replacing the old 0-100 slider. Sent to the
-// board as-is (raw kg), matching set_force/twist's existing unit convention -
-// tension_n already reads on this same scale, not true SI Newtons.
+const KG_TO_N = 9.81
+// Assessment mode: fixed 1kg load, motor braked in place once reached - see
+// ASSESSMENT_LOAD_N in angle_pid_wifi_test.cpp (must match).
+const ASSESSMENT_STATES = ['assessing_knee_extension', 'assessing_curl', 'assessment_done']
+// Preset force-level buttons (kg), converted to real Newtons (*KG_TO_N) before
+// being sent as start_exercise's forceSetpoint - the firmware's force PID
+// (calculateForcePID/forceDeltaToCounts) does real physics with this number,
+// unlike the old raw-passthrough convention.
 export const KG_OPTIONS = [1, 2, 3, 4, 5]
 
 // Client-side only for now - no exercise field exists in the sessions
 // database or the recommendation logic (sessions.py) yet, so this just
 // drives the Recommendation card's displayed copy. ptReps is a placeholder
 // stand-in for a real PT-entered value, not sourced from any clinician
-// input - swap this out once that exists.
+// input - swap this out once that exists. motorIndex matches
+// angle_pid_wifi_test.cpp's select_motor command (0 = motor A, 1 = motor B).
 export const EXERCISES = [
-  { id: 'knee_extension', label: 'Knee extension', ptReps: 10 },
-  { id: 'hamstring_curl', label: 'Hamstring curl', ptReps: 8 },
+  { id: 'knee_extension', label: 'Knee extension', ptReps: 10, motorIndex: 0 },
+  { id: 'hamstring_curl', label: 'Hamstring curl', ptReps: 8, motorIndex: 1 },
 ]
 
 export function useActuationSession(m) {
   const online = !!m?.actuationOk
-  const tension = m?.actuationTension ?? 0
+  // Telemetry now carries a real Newton reading (angle_pid_wifi_test.cpp
+  // sends active->force) - converted to kg once, right here, so every
+  // existing kg-based comparison/display/DB column below (target matching,
+  // chart, session summaries) keeps working unchanged instead of needing a
+  // *KG_TO_N or /KG_TO_N at each individual use site.
+  const tension = (m?.actuationTension ?? 0) / KG_TO_N
   const boardState = m?.actuationState ?? null
   const rec = m?.actuationRecommendation ?? null
+  const assessmentEnabled = !!m?.actuationAssessmentEnabled
+  const assessmentActive = ASSESSMENT_STATES.includes(boardState)
 
   const [level, setLevel] = useState(KG_OPTIONS[0])
   const [exercise, setExercise] = useState(EXERCISES[0].id)
@@ -98,14 +111,15 @@ export function useActuationSession(m) {
     if (phase !== 'countdown') return
     if (countdown <= 0) {
       sessionRef.current = { startedAt: null, samples: [], target: level }
-      sendCmd('set_force', level)
-      sendCmd('twist', level)
+      const motorIndex = EXERCISES.find((ex) => ex.id === exercise)?.motorIndex ?? 0
+      sendCmd('select_motor', motorIndex)
+      sendCmd('start_exercise', level * KG_TO_N)
       setPhase('twisting')
       return
     }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => clearTimeout(t)
-  }, [phase, countdown, level])
+  }, [phase, countdown, level, exercise])
 
   useEffect(() => {
     if (phase !== 'twisting') return
@@ -140,7 +154,7 @@ export function useActuationSession(m) {
     const s = sessionRef.current
     const { durationS, peak, avg } = summarizeSession(s)
     setSummary({ target: s.target, durationS, peak, avg, samples: s.samples.length })
-    sendCmd('untwist', 1)
+    sendCmd('stop', 0)
     setPhase('summary')
     postJson('/api/actuation/session', {
       target: s.target, durationS, peak, avg, samples: s.samples.length,
@@ -170,6 +184,18 @@ export function useActuationSession(m) {
   const respondRecommendation = (approved) =>
     postJson('/api/actuation/recommendation/respond', { approved })
 
+  // Clinician-only toggle (see sessions.py's assessment-mode gate) - patient
+  // only sees the Start Assessment button while this is on.
+  const setAssessmentEnabled = (enabled) =>
+    postJson('/api/actuation/assessment/enable', { enabled })
+
+  // Patient-triggered - the firmware runs the whole guided A-then-B sequence
+  // itself (see remoteStartAssessment/serviceRemoteFlows in
+  // angle_pid_wifi_test.cpp); progress is read straight from boardState
+  // (assessing_knee_extension / assessing_curl / assessment_done), not
+  // tracked here.
+  const startAssessment = () => sendCmd('start_assessment', 0)
+
   const [remarkText, setRemarkText] = useState('')
   const [remarkStatus, setRemarkStatus] = useState(null) // null | 'saved'
   const logRemark = async (sessionId) => {
@@ -182,6 +208,18 @@ export function useActuationSession(m) {
     }
   }
 
+  // Manual Control's motor selector - separate from `exercise`'s
+  // knee-extension/curl selector above, since manual jogging is raw
+  // per-motor testing, not tied to an exercise. Sends select_motor
+  // immediately on pick so the firmware has a target before the first jog
+  // press - see remoteJog() in angle_pid_wifi_test.cpp (only jogs while
+  // state == SELECT_MODE, which select_motor puts it in).
+  const [manualMotor, setManualMotorState] = useState(0)
+  const selectManualMotor = (motorIndex) => {
+    setManualMotorState(motorIndex)
+    sendCmd('select_motor', motorIndex)
+  }
+
   const jogStart = (cmd) => {
     sendCmd(cmd, 1)
     clearInterval(jogTimer.current)
@@ -189,7 +227,10 @@ export function useActuationSession(m) {
   }
   const jogStop = () => {
     clearInterval(jogTimer.current)
-    sendCmd('stop', 0)
+    // jog_stop, not stop - halts movement without deselecting the motor
+    // (stop is the full-abort command used by Force Stop), so repeated jog
+    // presses don't need the motor reselected every time.
+    sendCmd('jog_stop', 0)
   }
 
   // Target-vs-actual consistency (supposed force vs what the strain gauge
@@ -222,7 +263,9 @@ export function useActuationSession(m) {
     online, tension, boardState, rec,
     level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
-    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark, jogStart, jogStop,
+    respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark,
+    manualMotor, selectManualMotor, jogStart, jogStop,
+    assessmentEnabled, assessmentActive, setAssessmentEnabled, startAssessment,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   }
 }

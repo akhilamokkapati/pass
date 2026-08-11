@@ -251,3 +251,24 @@ def respond_to_recommendation(approved: bool) -> dict | None:
 def get_pending_recommendation() -> dict | None:
     with _state_lock:
         return _pending
+
+
+# ---- assessment-mode gate ---------------------------------------------
+# Clinician-controlled toggle: assessment mode only shows up as an option on
+# the patient's side while this is on ("only shows as an option if the
+# physio instructs the patient to do so"). In-memory like the pending
+# recommendation above - a persistent toggle a clinician actively manages
+# during a session, not history that needs to survive a restart.
+_assessment_enabled = False
+
+
+def set_assessment_enabled(enabled: bool) -> bool:
+    global _assessment_enabled
+    with _state_lock:
+        _assessment_enabled = enabled
+        return _assessment_enabled
+
+
+def is_assessment_enabled() -> bool:
+    with _state_lock:
+        return _assessment_enabled

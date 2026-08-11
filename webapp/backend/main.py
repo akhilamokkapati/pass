@@ -75,6 +75,7 @@ async def _broadcaster() -> None:
         if _clients:
             payload = ingest.snapshot()
             payload["actuationRecommendation"] = sessions.get_pending_recommendation()
+            payload["actuationAssessmentEnabled"] = sessions.is_assessment_enabled()
             msg = json.dumps(payload)
             for ws in list(_clients):
                 try:
@@ -180,6 +181,15 @@ async def api_actuation_session_remark(request: Request) -> dict:
 @app.get("/api/actuation/session/{session_id}/remarks")
 async def api_actuation_session_remarks(session_id: int) -> dict:
     return {"remarks": sessions.get_remarks(session_id)}
+
+
+@app.post("/api/actuation/assessment/enable")
+async def api_actuation_assessment_enable(request: Request) -> dict:
+    """Clinician toggles whether assessment mode is offered to the patient
+    (see sessions.py's assessment-mode gate note)."""
+    body = await request.json()
+    enabled = bool(body.get("enabled"))
+    return {"enabled": sessions.set_assessment_enabled(enabled)}
 
 
 @app.post("/api/actuation/recommendation/respond")

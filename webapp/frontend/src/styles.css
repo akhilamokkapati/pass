@@ -263,6 +263,7 @@ body {
 .act-tension { font-size: 44px; font-weight: 800; margin-top: 6px; }
 .act-tension span { font-size: 18px; font-weight: 600; color: var(--muted); margin-left: 4px; }
 .act-tension.small { font-size: 20px; font-weight: 700; margin-top: 6px; }
+.act-exercise-title { font-size: 22px; font-weight: 800; margin-top: 2px; }
 .act-level { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-bottom: 14px; }
 .act-level span { color: var(--muted); font-size: 13px; font-weight: 600; }
 .act-level input[type="range"] { width: 100%; accent-color: #c77bf0; }
