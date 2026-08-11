@@ -68,8 +68,8 @@ export const KG_OPTIONS = [1, 2, 3, 4, 5]
 // input - swap this out once that exists. motorIndex matches
 // angle_pid_wifi_test.cpp's select_motor command (0 = motor A, 1 = motor B).
 export const EXERCISES = [
-  { id: 'knee_extension', label: 'Knee extension', ptReps: 10, motorIndex: 0 },
-  { id: 'hamstring_curl', label: 'Hamstring curl', ptReps: 8, motorIndex: 1 },
+  { id: 'knee_extension', label: 'Knee extension', ptReps: 10, motorIndex: 1 },
+  { id: 'hamstring_curl', label: 'Hamstring curl', ptReps: 8, motorIndex: 0 },
 ]
 
 export function useActuationSession(m) {
@@ -84,6 +84,15 @@ export function useActuationSession(m) {
   const rec = m?.actuationRecommendation ?? null
   const assessmentEnabled = !!m?.actuationAssessmentEnabled
   const assessmentActive = ASSESSMENT_STATES.includes(boardState)
+  // Rep count comes from the knee module's own IMU-based counter
+  // (useMetrics.js's repsR, threshold-crossing on knee flexion angle) -
+  // already flowing through the same `m` snapshot passed in here, no new
+  // wiring needed. It's a global, ever-increasing counter (only reset by the
+  // Gait tab's own "Reset reps" control), so repsCompleted below is a LOCAL
+  // delta from a baseline captured when the exercise starts, not the raw
+  // total - see beginExercise(). Right knee only - the actuation hardware
+  // is right-leg-only, no left-side rig exists.
+  const totalReps = m?.repsR ?? 0
 
   const [level, setLevel] = useState(KG_OPTIONS[0])
   const [exercise, setExercise] = useState(EXERCISES[0].id)
@@ -97,6 +106,7 @@ export function useActuationSession(m) {
   // "previous" would immediately become the session that just finished.
   const [previousSamples, setPreviousSamples] = useState([])
   const sessionRef = useRef({ startedAt: null, samples: [], target: 0 })
+  const repsBaselineRef = useRef(0)
   const jogTimer = useRef(null)
 
   const fetchPreviousSamples = () => {
@@ -147,8 +157,10 @@ export function useActuationSession(m) {
   const beginExercise = () => {
     sessionRef.current.startedAt = Date.now()
     sessionRef.current.samples = []
+    repsBaselineRef.current = totalReps
     setPhase('exercising')
   }
+  const repsCompleted = phase === 'exercising' ? Math.max(0, totalReps - repsBaselineRef.current) : 0
 
   const stopSession = () => {
     const s = sessionRef.current
@@ -208,13 +220,20 @@ export function useActuationSession(m) {
     }
   }
 
-  // Manual Control's motor selector - separate from `exercise`'s
-  // knee-extension/curl selector above, since manual jogging is raw
-  // per-motor testing, not tied to an exercise. Sends select_motor
-  // immediately on pick so the firmware has a target before the first jog
-  // press - see remoteJog() in angle_pid_wifi_test.cpp (only jogs while
-  // state == SELECT_MODE, which select_motor puts it in).
-  const [manualMotor, setManualMotorState] = useState(0)
+  // Manual Control's motor selector - a separate control from `exercise`'s
+  // knee-extension/curl picker above (manual jogging is raw per-motor
+  // testing, not tied to an exercise), but its highlighted/default motor
+  // tracks whichever exercise was picked/run last, so it starts pointed at
+  // the right motor instead of always defaulting to A. Still overridable by
+  // clicking the other button directly. Sends select_motor immediately on
+  // pick so the firmware has a target before the first jog press - see
+  // remoteJog() in angle_pid_wifi_test.cpp (only jogs while state ==
+  // SELECT_MODE, which select_motor puts it in).
+  const [manualMotor, setManualMotorState] = useState(EXERCISES[0].motorIndex)
+  useEffect(() => {
+    const motorIndex = EXERCISES.find((ex) => ex.id === exercise)?.motorIndex
+    if (motorIndex != null) setManualMotorState(motorIndex)
+  }, [exercise])
   const selectManualMotor = (motorIndex) => {
     setManualMotorState(motorIndex)
     sendCmd('select_motor', motorIndex)
@@ -265,7 +284,7 @@ export function useActuationSession(m) {
     startSession, markReady, beginExercise, stopSession, forceStop,
     respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark,
     manualMotor, selectManualMotor, jogStart, jogStop,
-    assessmentEnabled, assessmentActive, setAssessmentEnabled, startAssessment,
+    assessmentEnabled, assessmentActive, setAssessmentEnabled, startAssessment, repsCompleted,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   }
 }

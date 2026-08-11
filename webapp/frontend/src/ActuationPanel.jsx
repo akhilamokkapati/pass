@@ -63,7 +63,7 @@ export default function ActuationPanel({ session, act }) {
     startSession, markReady, beginExercise, stopSession, forceStop,
     respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark,
     manualMotor, selectManualMotor, jogStart, jogStop,
-    assessmentEnabled, assessmentActive, setAssessmentEnabled, startAssessment,
+    assessmentEnabled, assessmentActive, setAssessmentEnabled, startAssessment, repsCompleted,
     hasTarget, target, deltaPct, comparisonData, comparisonWindowS,
   } = act
   const selectedExercise = EXERCISES.find((ex) => ex.id === exercise)
@@ -107,7 +107,10 @@ export default function ActuationPanel({ session, act }) {
         </div>
       ) : (
         <div className="card center accent-actuation act-session">
-          <div className="card-head"><h3>Resistive Training</h3></div>
+          <div className="card-head">
+            <h3>Resistive Training</h3>
+            {phase === 'exercising' && <span className="cue good">Exercise in progress</span>}
+          </div>
 
           {phase === 'idle' && (
             <>
@@ -170,9 +173,10 @@ export default function ActuationPanel({ session, act }) {
           {phase === 'exercising' && (
             <>
               <div className="act-exercise-title">{selectedExercise?.label}</div>
-              <div className="cue good">Exercise in progress</div>
               <div className="act-tension small">{target} kg</div>
-              <button className="stop-circle" onClick={stopSession}>Stop</button>
+              <div className="cue">Reps</div>
+              <div className="act-tension">{repsCompleted}<span> / {selectedExercise?.ptReps}</span></div>
+              <button className="end-circle" onClick={stopSession}>End Session</button>
             </>
           )}
 
@@ -239,21 +243,35 @@ export default function ActuationPanel({ session, act }) {
               {remarkStatus === 'saved' && <div className="cue good">Remark logged</div>}
             </div>
           )}
-          {isClinician && (
-            <div className="act-remark">
-              <button className="btn ghost" onClick={() => setAssessmentEnabled(!assessmentEnabled)}>
-                {assessmentEnabled ? 'Disable assessment' : 'Instruct patient to assess'}
-              </button>
-              {assessmentEnabled && <div className="cue good">Assessment offered to patient</div>}
-            </div>
-          )}
-          {!isClinician && assessmentEnabled && phase === 'idle' && (
-            <div className="act-remark">
+        </div>
+      )}
+
+      {/* Independent of `rec` on purpose - this must stay visible even when
+          there's no pending recommendation (e.g. right after a backend
+          restart wipes it, or before any session has ever been logged),
+          otherwise the clinician's toggle and the patient's button both
+          vanish along with the recommendation card. */}
+      {isClinician && (
+        <div className="card center accent-actuation">
+          <div className="card-head"><h3>Assessment</h3></div>
+          <button className="btn ghost" onClick={() => setAssessmentEnabled(!assessmentEnabled)}>
+            {assessmentEnabled ? 'Disable assessment' : 'Instruct patient to assess'}
+          </button>
+          {assessmentEnabled && <div className="cue good">Assessment offered to patient</div>}
+        </div>
+      )}
+      {!isClinician && assessmentEnabled && (
+        <div className="card center accent-actuation">
+          <div className="card-head"><h3>Assessment</h3></div>
+          {phase === 'idle' ? (
+            <>
               <button className="btn download" onClick={startAssessment} disabled={!online || assessmentActive}>
                 Start Assessment
               </button>
               {assessmentLabel && <div className="cue good">{assessmentLabel}</div>}
-            </div>
+            </>
+          ) : (
+            <div className="cue">Finish or stop your current session first</div>
           )}
         </div>
       )}

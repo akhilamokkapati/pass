@@ -73,6 +73,18 @@ def _get_conn() -> sqlite3.Connection:
                 text TEXT NOT NULL
             )
         """)
+        # Single-row settings table (id is always 1) - just the assessment
+        # toggle for now. SQLite-backed rather than an in-memory bool
+        # specifically so it survives backend restarts, which happen
+        # constantly during dev (every frontend rebuild needs one) and were
+        # silently flipping this back off each time.
+        _conn.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                assessment_enabled INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        _conn.execute("INSERT OR IGNORE INTO app_settings (id, assessment_enabled) VALUES (1, 0)")
         _conn.commit()
     return _conn
 
@@ -256,19 +268,20 @@ def get_pending_recommendation() -> dict | None:
 # ---- assessment-mode gate ---------------------------------------------
 # Clinician-controlled toggle: assessment mode only shows up as an option on
 # the patient's side while this is on ("only shows as an option if the
-# physio instructs the patient to do so"). In-memory like the pending
-# recommendation above - a persistent toggle a clinician actively manages
-# during a session, not history that needs to survive a restart.
-_assessment_enabled = False
-
-
+# physio instructs the patient to do so"). SQLite-backed (app_settings,
+# above) rather than in-memory - unlike the pending recommendation, this
+# needs to survive a backend restart, since restarting mid-dev shouldn't
+# force the clinician to re-toggle it.
 def set_assessment_enabled(enabled: bool) -> bool:
-    global _assessment_enabled
-    with _state_lock:
-        _assessment_enabled = enabled
-        return _assessment_enabled
+    with _lock:
+        conn = _get_conn()
+        conn.execute("UPDATE app_settings SET assessment_enabled = ? WHERE id = 1", (1 if enabled else 0,))
+        conn.commit()
+    return enabled
 
 
 def is_assessment_enabled() -> bool:
-    with _state_lock:
-        return _assessment_enabled
+    with _lock:
+        conn = _get_conn()
+        row = conn.execute("SELECT assessment_enabled FROM app_settings WHERE id = 1").fetchone()
+    return bool(row[0]) if row else False

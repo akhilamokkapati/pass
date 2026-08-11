@@ -678,6 +678,8 @@ float pendingForceTargetN = 0;
 
 void remoteStopAll() {
   brakeAll();
+  motorA.controlSignal = 0;
+  motorB.controlSignal = 0;
   state = SELECT_MOTOR;
   active = nullptr;
   brakeModeSelected = false;
@@ -704,14 +706,17 @@ const int JOG_PWM = 150;
 
 void remoteJog(int dir) {
   if (active == nullptr || state != SELECT_MODE) return;
-  setMotor(*active, dir * active->sign * JOG_PWM);
+  active->controlSignal = dir * active->sign * JOG_PWM;   // keep in sync - see printMotorActivityIfDue()
+  setMotor(*active, active->controlSignal);
 }
 
 // Jog release - just halts movement, unlike remoteStopAll() it does NOT
 // deselect the motor, so repeated jog presses don't need select_motor sent
 // again between every press/release.
 void remoteJogStop() {
-  if (active != nullptr) setMotor(*active, 0);
+  if (active == nullptr) return;
+  active->controlSignal = 0;
+  setMotor(*active, 0);
 }
 
 // Exercise mode: pretension fixed at EXERCISE_PRETENSION_N, then the
@@ -780,8 +785,10 @@ void serviceRemoteFlows() {
 // priority over the raw serial-state-machine name, since that's what the
 // webapp actually needs to show the patient/clinician.
 const char* stateName() {
-  if (assessmentStep == ASSESS_MOTOR_A)  return "assessing_knee_extension";
-  if (assessmentStep == ASSESS_MOTOR_B)  return "assessing_curl";
+  // motor A = curl, motor B = knee extension (see EXERCISES in
+  // useActuationSession.js - must match)
+  if (assessmentStep == ASSESS_MOTOR_A)  return "assessing_curl";
+  if (assessmentStep == ASSESS_MOTOR_B)  return "assessing_knee_extension";
   if (assessmentStep == ASSESS_DONE)     return "assessment_done";
   switch (state) {
     case SELECT_MOTOR:        return "select_motor";
@@ -867,6 +874,27 @@ void printWifiHealthIfDue() {
     Serial.print(" udp begin ok="); Serial.print(udpBeginOk); Serial.print(" fail="); Serial.print(udpBeginFail);
     Serial.print(" end ok="); Serial.print(udpEndOk); Serial.print(" fail="); Serial.println(udpEndFail);
   }
+}
+
+// Periodic, throttled print of what the active motor is actually being
+// driven at - only fires while controlSignal is nonzero, i.e. the motor is
+// genuinely signaled to move, and stays quiet otherwise. Reads
+// active->controlSignal, which every drive path already writes before
+// calling setMotor() (calculatePID, calibration seek, remoteJog above) - no
+// changes to any of those functions needed, this only observes.
+uint32_t lastMotorActivityPrint = 0;
+const uint32_t MOTOR_ACTIVITY_PRINT_MS = 500;
+
+void printMotorActivityIfDue() {
+  uint32_t now = millis();
+  if (now - lastMotorActivityPrint < MOTOR_ACTIVITY_PRINT_MS) return;
+  lastMotorActivityPrint = now;
+  if (!Serial || active == nullptr || active->controlSignal == 0) return;
+  Serial.print("# motor "); Serial.print(active->name);
+  Serial.print(" driving signal="); Serial.print(active->controlSignal);
+  Serial.print(" position="); Serial.print(active->position);
+  Serial.print(" force="); Serial.print(active->force);
+  Serial.println(" N");
 }
 
 void setup()
@@ -1013,4 +1041,5 @@ void loop()
   serviceRemoteFlows();
   sendTelemetryIfDue();
   printWifiHealthIfDue();
+  printMotorActivityIfDue();
 }
