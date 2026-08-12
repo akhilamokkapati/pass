@@ -58,7 +58,7 @@ function downloadSummary(summary) {
 export default function ActuationPanel({ session, act }) {
   const isClinician = session?.role === 'clinician'
   const {
-    online, tension, boardState, rec,
+    online, tension, boardState, rec, pretensionKg,
     level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
     respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark,
@@ -157,8 +157,8 @@ export default function ActuationPanel({ session, act }) {
 
           {phase === 'twisting' && (
             <>
-              <div className="cue">Setting up…</div>
-              <div className="act-tension small">{tension.toFixed(1)} / {level} kg</div>
+              <div className="cue">Pretensioning to {pretensionKg.toFixed(2)} kg…</div>
+              <div className="act-tension small">{tension.toFixed(2)} / {pretensionKg.toFixed(2)} kg</div>
               <button className="btn ghost" onClick={markReady}>Mark ready</button>
             </>
           )}

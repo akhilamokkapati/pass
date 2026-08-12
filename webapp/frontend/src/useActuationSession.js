@@ -51,6 +51,12 @@ const JOG_REPEAT_MS = 150
 // session. Good enough for a comparison chart; not a precision timing claim.
 const SAMPLE_DT_S = 0.05
 const KG_TO_N = 9.81
+// Fixed pretension target during "twisting"/setup - angle_pid_wifi_test.cpp's
+// EXERCISE_PRETENSION_N, must match. NOT the training weight: the motor only
+// seeks this during calibration, then halts (AWAIT_FORCE/"Ready") until
+// "Begin exercise" applies the real target - see remoteStartExercise().
+const EXERCISE_PRETENSION_N = 5.0
+const EXERCISE_PRETENSION_KG = EXERCISE_PRETENSION_N / KG_TO_N
 // Assessment mode: fixed 1kg load, motor braked in place once reached - see
 // ASSESSMENT_LOAD_N in angle_pid_wifi_test.cpp (must match).
 const ASSESSMENT_STATES = ['assessing_knee_extension', 'assessing_curl', 'assessment_done']
@@ -172,7 +178,12 @@ export function useActuationSession(m) {
     const s = sessionRef.current
     const { durationS, peak, avg } = summarizeSession(s)
     setSummary({ target: s.target, durationS, peak, avg, samples: s.samples.length })
-    sendCmd('stop', 0)
+    // end_session, not stop - lets the board untwist the string back down to
+    // ~0N under its own force PID before fully stopping (remoteEndSession()/
+    // endSessionReleasing in angle_pid_wifi_test.cpp), instead of leaving
+    // tension braked in place. Force Stop (forceStop, below) is the
+    // immediate-abort path and still sends plain 'stop'.
+    sendCmd('end_session', 0)
     setPhase('summary')
     postJson('/api/actuation/session', {
       target: s.target, durationS, peak, avg, samples: s.samples.length,
@@ -294,7 +305,7 @@ export function useActuationSession(m) {
   )
 
   return {
-    online, tension, boardState, rec,
+    online, tension, boardState, rec, pretensionKg: EXERCISE_PRETENSION_KG,
     level, setLevel, exercise, setExercise, phase, setPhase, countdown, summary, logRefreshKey,
     startSession, markReady, beginExercise, stopSession, forceStop,
     respondRecommendation, remarkText, setRemarkText, remarkStatus, logRemark,

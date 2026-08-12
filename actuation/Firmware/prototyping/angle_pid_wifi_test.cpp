@@ -36,8 +36,11 @@
  * flows above is running (see stateName()), not just the raw serial state
  * machine enum.
  * Commands in (UDP :5008): select_motor, start_exercise, begin_exercise,
- * start_assessment, twist/untwist (manual jog), jog_stop, stop - see
- * handleWifiCommands() below.
+ * end_session, start_assessment, twist/untwist (manual jog), jog_stop, stop
+ * - see handleWifiCommands() below. end_session (webapp: "End Session")
+ * differs from stop (webapp: "Force stop"): it drives the active motor's
+ * tension back down to ~0N under the force PID first, then stops - stop is
+ * an immediate brake-in-place, no release.
  */
 
 #include <Arduino.h>
@@ -687,6 +690,12 @@ uint32_t assessmentHoldStart = 0;
 bool pendingForceTargetValid = false;
 float pendingForceTargetN = 0;
 
+// "End Session" release-to-zero - see remoteEndSession() below.
+bool endSessionReleasing = false;
+uint32_t endSessionStableStartMs = 0;
+const float RELEASE_FORCE_TOL = 0.3f;      // N, counts as "at zero"
+const uint32_t RELEASE_STABLE_MS = 300;    // must hold within tolerance this long before the final stop
+
 void remoteStopAll() {
   brakeAll();
   motorA.controlSignal = 0;
@@ -697,13 +706,30 @@ void remoteStopAll() {
   assessmentStep = ASSESS_NONE;
   assessmentHoldStart = 0;
   pendingForceTargetValid = false;
+  endSessionReleasing = false;
   if (Serial) Serial.println("# remote stop");
 }
 
 void remoteSelectMotor(int which) {
   active = (which == 0) ? &motorA : &motorB;
   state = SELECT_MODE;
+  endSessionReleasing = false;
   if (Serial) { Serial.print("# remote select motor "); Serial.println(active->name); }
+}
+
+// "End Session" - unlike stop's immediate brake-in-place, this keeps the
+// force PID running with forceSetpoint dropped to 0N, so the string
+// actively untwists back down to ~0N under control (not just released to
+// spring back on its own) before the motor is fully stopped/deselected -
+// see the endSessionReleasing check in loop()'s FORCE_CONTROL block.
+void remoteEndSession() {
+  if (active == nullptr) { remoteStopAll(); return; }   // nothing selected, nothing to release
+  active->forceSetpoint = 0;
+  resetPID(*active);
+  state = FORCE_CONTROL;
+  endSessionReleasing = true;
+  endSessionStableStartMs = 0;
+  if (Serial) Serial.println("# remote end session, releasing to 0N");
 }
 
 // Manual jog - raw PWM via setMotor(), bypassing the calibration/force PID
@@ -713,7 +739,7 @@ void remoteSelectMotor(int which) {
 // state, so there's nothing else fighting for the pin. dir: +1 = twist
 // (tension up), -1 = untwist - m.sign keeps this consistent regardless of
 // which physical direction each motor's wiring winds in.
-const int JOG_PWM = 150;
+const int JOG_PWM = 220;   // was 150 - bumped for faster manual jog (255 = full duty)
 
 void remoteJog(int dir) {
   if (active == nullptr || state != SELECT_MODE) return;
@@ -742,6 +768,7 @@ void remoteJogStop() {
 void remoteStartExercise(float forceN) {
   if (active == nullptr) return;   // select_motor must arrive first
   brakeModeSelected = false;
+  endSessionReleasing = false;
   pendingForceTargetValid = true;
   pendingForceTargetN = forceN;
   active->pretension = EXERCISE_PRETENSION_N;
@@ -853,6 +880,8 @@ void handleWifiCommands() {
     remoteStartExercise(value);
   } else if (strcmp(cmd, "begin_exercise") == 0) {
     remoteBeginExercise();
+  } else if (strcmp(cmd, "end_session") == 0) {
+    remoteEndSession();
   } else if (strcmp(cmd, "start_assessment") == 0) {
     remoteStartAssessment();
   } else if (strcmp(cmd, "twist") == 0) {
@@ -1023,6 +1052,23 @@ void loop()
       updateForce(*active);
       calculateForcePID(*active);
       calculatePID(*active, dt);
+    }
+
+    // End-session release: forceSetpoint was already dropped to 0 by
+    // remoteEndSession() - once the force PID above has actually driven
+    // measured tension down to ~0N and held it there (not just crossed
+    // through 0 on the way to overshooting), finish with a real stop
+    // instead of leaving the motor sitting in FORCE_CONTROL forever.
+    if (endSessionReleasing) {
+      if (fabsf(active->force) < RELEASE_FORCE_TOL) {
+        if (endSessionStableStartMs == 0) endSessionStableStartMs = millis();
+        if (millis() - endSessionStableStartMs >= RELEASE_STABLE_MS) {
+          if (Serial) Serial.println("# end session release complete, stopping");
+          remoteStopAll();
+        }
+      } else {
+        endSessionStableStartMs = 0;
+      }
     }
   }
 
