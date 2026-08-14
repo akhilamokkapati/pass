@@ -1,8 +1,8 @@
-# PASS: Patient Assessment Sensing System
+# RUNMO: Helping you run-more
 
-**PASS** is a modular lower-limb wearable that makes physiotherapy quantitative:
+**RUNMO** is a modular lower-limb wearable that makes physiotherapy quantitative:
 it captures objective lower-limb kinematics and loading, gives patients real-time
-feedback, and produces clinically useful data for physiotherapists. PASS is **not
+feedback, and produces clinically useful data for physiotherapists. RUNMO is **not
 tied to any single condition** - the same measurements support rehabilitation across
 many contexts (post-surgical recovery, sports/injury rehab, general musculoskeletal
 physiotherapy, and neurological rehabilitation such as post-stroke).
@@ -23,13 +23,13 @@ their subsystem's folder.
 | [`actuation/`](actuation/) | Actuation | Assistive actuation + load-cell force/strength measurement | Planned |
 | [`housing/`](housing/) | Housing | Mechanical housing, mounting, power/enclosure | Planned |
 
-The **full PASS platform** integrates all subsystems; each folder delivers its own
+The **full RUNMO platform** integrates all subsystems; each folder delivers its own
 validated piece. See each subsystem's README for scope and status.
 
 ## Repository layout
 
 ```
-pass/
+runmo/
   knee/        <- knee subsystem (code, tests, firmware, dashboard, README, CLAUDE.md)
   hip/         <- hip subsystem
   feet/        <- feet / FSR subsystem
