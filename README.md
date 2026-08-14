@@ -38,14 +38,3 @@ runmo/
   README.md    <- this file
 ```
 
-## Contributing (for teammates)
-
-1. Put your work inside **your subsystem's folder** (e.g. `feet/`). Keep code, tests,
-   firmware and docs together there.
-2. Add a short `README.md` in your folder: what the module does, how to run it, status.
-3. Keep each subsystem independently runnable (its own `requirements.txt` / setup).
-4. Don't reach across into another subsystem's folder; if you need shared code, raise
-   it so we can add a `shared/` module deliberately.
-
-New here? Start with the [`knee/`](knee/) subsystem as a reference for how a subsystem
-is structured (source modules + test-first tests + firmware + README).
